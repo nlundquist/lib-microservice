@@ -11,7 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 const EventEmitter = require("events");
 const jwt = require("jsonwebtoken");
-const NATSClient = require("@randomrod/lib-nats-client");
+const { NATSClient } = require("@randomrod/lib-nats-client");
 class Microservice extends NATSClient {
     constructor(serviceName) {
         super(serviceName);
@@ -32,7 +32,7 @@ class Microservice extends NATSClient {
     authorizeRequest(topic, context) {
         if (!this.messageValidator.publicKey || !this.messageValidator.algorithm)
             throw 'UNAUTHORIZED:  Validator Not Configured';
-        if (!context.ephemeralToken && !topic.endsWith("NOAUTH") && !topic.startsWith("AUTHORIZATION"))
+        if (!context.ephemeralToken && !topic.endsWith("NOAUTH"))
             throw 'UNAUTHORIZED: Ephemeral Authorization Token Missing';
         if (!context.ephemeralToken)
             return {};

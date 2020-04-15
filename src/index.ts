@@ -1,13 +1,13 @@
 "use strict";
 
-const EventEmitter = require("events");
-const jwt          = require("jsonwebtoken");
-const NATSClient   = require("@randomrod/lib-nats-client");
+const EventEmitter      = require("events");
+const jwt               = require("jsonwebtoken");
+const { NATSClient }    = require("@randomrod/lib-nats-client");
 
 export default class Microservice extends NATSClient {
     messageValidator: any = {
         publicKey: process.env.JWT_PUBLIC_KEY || null,
-        algorithm: process.env.JWT_ALGORITHM || null
+        algorithm: process.env.JWT_ALGORITHM  || null
     };
 
     constructor(public serviceName: string) {
@@ -22,7 +22,7 @@ export default class Microservice extends NATSClient {
         if(!this.messageValidator.publicKey || !this.messageValidator.algorithm)
             throw 'UNAUTHORIZED:  Validator Not Configured';
 
-        if(!context.ephemeralToken && !topic.endsWith("NOAUTH") && !topic.startsWith("AUTHORIZATION"))
+        if(!context.ephemeralToken && !topic.endsWith("NOAUTH"))
             throw 'UNAUTHORIZED: Ephemeral Authorization Token Missing';
 
         if(!context.ephemeralToken) return {};
