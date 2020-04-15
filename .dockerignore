@@ -1,0 +1,6 @@
+src/
+node_modules/
+README.MD
+README.md
+.gitignore
+tsconfig.json

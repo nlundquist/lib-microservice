@@ -1,0 +1,27 @@
+{
+  "name": "@randomrod/lib-microservice",
+  "version": "2.0.0",
+  "description": "Base-class for use in building a NATS.io-based Microservices Mesh Service components",
+  "main": "dist/index.js",
+  "typings": "./dist/index.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RandomDynamix/lib-microservice.git"
+  },
+  "author": "randomrod",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/RandomDynamix/lib-microservice/issues"
+  },
+  "homepage": "https://github.com/RandomDynamix/lib-microservice#readme",
+  "dependencies": {
+    "@randomrod/lib-nats-client": "^2.0.0",
+    "jsonwebtoken": "^8.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^12.12.6"
+  }
+}
