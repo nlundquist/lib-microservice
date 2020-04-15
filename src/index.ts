@@ -18,7 +18,7 @@ export default class Microservice extends NATSClient {
         await super.init();
     }
 
-    authorizeRequest(topic: string, context: any) {
+    private authorizeRequest(topic: string, context: any) {
         if(!this.messageValidator.publicKey || !this.messageValidator.algorithm)
             throw 'UNAUTHORIZED:  Validator Not Configured';
 
