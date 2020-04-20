@@ -165,4 +165,4 @@ class Microservice extends NATSClient {
         return super.publishTopic(replyTopic, response);
     }
 }
-exports.default = Microservice;
+exports.Microservice = Microservice;

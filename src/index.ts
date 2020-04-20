@@ -6,7 +6,7 @@ const { NATSClient }    = require("@randomrod/lib-nats-client");
 
 const CLIENT_PREFIX = 'CLIENT';
 
-export default class Microservice extends NATSClient {
+export class Microservice extends NATSClient {
     messageValidator: any = {
         privateKey: process.env.JWT_PRIVATE_KEY || null,
         publicKey:  process.env.JWT_PUBLIC_KEY  || null,
