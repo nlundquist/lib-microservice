@@ -49,8 +49,9 @@ export class Microservice extends NATSClient {
         let stringQueryData = JSON.stringify(queryData);
         try{this.emit('debug', 'no correlation', `NATS REQUEST: ${stringQueryData}`);}catch(err){}
 
-        if(timeoutOverride) return super.queryTopic(`${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringQueryData, timeoutOverride);
-        let queryResponse = await super.queryTopic(`${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringQueryData);
+        let queryResponse = null;
+        if(timeoutOverride) queryResponse = super.queryTopic(`${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringQueryData, timeoutOverride);
+        else queryResponse= await super.queryTopic(`${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringQueryData);
         if(queryResponse) return JSON.parse(queryResponse);
         return null;
     }
