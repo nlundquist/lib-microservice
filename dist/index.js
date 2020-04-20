@@ -75,7 +75,10 @@ class Microservice extends NATSClient {
             catch (err) { }
             if (timeoutOverride)
                 return _super.queryTopic.call(this, `${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringQueryData, timeoutOverride);
-            return yield _super.queryTopic.call(this, `${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringQueryData);
+            let queryResponse = yield _super.queryTopic.call(this, `${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringQueryData);
+            if (queryResponse)
+                return JSON.parse(queryResponse);
+            return null;
         });
     }
     publishEvent(topic, context, payload, topicPrefixOverride) {
