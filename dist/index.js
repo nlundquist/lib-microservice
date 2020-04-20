@@ -30,6 +30,18 @@ class Microservice extends NATSClient {
         });
         return __awaiter(this, void 0, void 0, function* () {
             yield _super.init.call(this);
+            if (!this.messageValidator.privateKey) {
+                try {
+                    this.emit('debug', 'no correlation', 'Message Signing NOT Configured');
+                }
+                catch (err) { }
+            }
+            if (!this.messageValidator.publicKey) {
+                try {
+                    this.emit('debug', 'no correlation', 'Message Validation NOT Configured');
+                }
+                catch (err) { }
+            }
         });
     }
     queryTopic(topic, context, payload, timeoutOverride, topicPrefixOverride) {
@@ -51,9 +63,14 @@ class Microservice extends NATSClient {
                 payload
             };
             //TODO ROD HERE - JSON SUPPORT?
+            let stringQueryData = JSON.stringify(queryData);
+            try {
+                this.emit('debug', 'no correlation', `NATS REQUEST: ${stringQueryData}`);
+            }
+            catch (err) { }
             if (timeoutOverride)
-                return _super.queryTopic.call(this, topic, JSON.stringify(queryData), timeoutOverride);
-            return yield _super.queryTopic.call(this, `${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, JSON.stringify(queryData));
+                return _super.queryTopic.call(this, topic, stringQueryData, timeoutOverride);
+            return yield _super.queryTopic.call(this, `${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringQueryData);
         });
     }
     publishEvent(topic, context, payload, topicPrefixOverride) {
@@ -64,7 +81,12 @@ class Microservice extends NATSClient {
             payload
         };
         //TODO ROD HERE - JSON SUPPORT?
-        return super.publishTopic(`${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, JSON.stringify(eventData));
+        let stringEventData = JSON.stringify(eventData);
+        try {
+            this.emit('debug', 'no correlation', `NATS PUBLISH: ${stringEventData}`);
+        }
+        catch (err) { }
+        return super.publishTopic(`${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringEventData);
     }
     registerTopicHandler(topic, fnHandler, queue = null, topicPrefixOverride) {
         try {
@@ -116,7 +138,7 @@ class Microservice extends NATSClient {
     generateToken(assertions) {
         if (!this.messageValidator.privateKey || !this.messageValidator.algorithm)
             throw "MessageValidator Not Configured";
-        return jwt.sign(assertions, this.messageValidator.privateKey, { algorithms: [this.messageValidator.algorithm] });
+        return jwt.sign(assertions, this.messageValidator.privateKey, { algorithm: this.messageValidator.algorithm });
     }
     verifyToken(token) {
         if (!this.messageValidator.publicKey || !this.messageValidator.algorithm)
