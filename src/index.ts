@@ -32,12 +32,14 @@ export class Microservice extends NATSClient {
             throw 'INVALID REQUEST: One or more of context or payload are not properly structured objects.';
 
         //Reset the Context to remove previously decoded information (keep it clean!)
-        let newContext = {
-            idToken:            context.idToken             ? context.idToken               : null,
-            serviceToken:       context.serviceToken        ? context.serviceToken          : null,
-            impersonationToken: context.impersonationToken  ? context.impersonationToken    : null,
-            ephemeralToken:     context.ephemeralToken      ? context.ephemeralToken        : null,
-        }
+        let newContext: any = {
+            correlationUUID: context.correlationUUID ? context.correlationUUID : 'No Correlation'
+        };
+        if(context.idToken) newContext.idToken = context.idToken;
+        if(context.serviceToken) newContext.serviceToken = context.serviceToken;
+        if(context.impersonationToken) newContext.impersonationToken = context.impersonationToken;
+        if(context.ephemeralToken) newContext.ephemeralToken = context.ephemeralToken;
+
         let queryData = {
             context: newContext,
             payload
@@ -47,7 +49,7 @@ export class Microservice extends NATSClient {
         let stringQueryData = JSON.stringify(queryData);
         try{this.emit('debug', 'no correlation', `NATS REQUEST: ${stringQueryData}`);}catch(err){}
 
-        if(timeoutOverride) return super.queryTopic(topic, stringQueryData, timeoutOverride);
+        if(timeoutOverride) return super.queryTopic(`${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringQueryData, timeoutOverride);
         return await super.queryTopic(`${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringQueryData);
     }
 
