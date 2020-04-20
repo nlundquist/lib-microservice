@@ -151,7 +151,8 @@ class Microservice extends NATSClient {
         return jwt.verify(token, this.messageValidator.publicKey, { algorithms: [this.messageValidator.algorithm] });
     }
     decodeToken(token) {
-        return jwt.decode(token);
+        let tokenPayload = token.split(".")[1];
+        return base64url.decode(tokenPayload);
     }
     //PRIVATE FUNCTIONS
     validateRequest(topic, context) {
@@ -177,7 +178,7 @@ class Microservice extends NATSClient {
             token_assertions.authorization = ephemeralAuth.authorization;
         }
         catch (err) {
-            throw `UNAUTHORIZED: JWT Verify Error: ${JSON.stringify(err)}`;
+            throw `UNAUTHORIZED: validateRequest Error: ${JSON.stringify(err)}`;
         }
         return token_assertions;
     }
