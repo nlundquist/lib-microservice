@@ -97,13 +97,13 @@ class Microservice extends NATSClient {
                     this.emit('debug', 'SERVICE', 'Microservice | TopicHandler (' + topic + ') | ' + request);
                     //TODO ROD HERE - JSON SUPPORT?
                     let parsedRequest = request ? JSON.parse(request) : null;
-                    if (!parsedRequest.request || !parsedRequest.request.context || !parsedRequest.request.payload)
-                        throw 'INVALID REQUEST: One or more of request, context, or payload are missing.';
+                    if (!parsedRequest.context || !parsedRequest.payload)
+                        throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
                     //Verify MESSAGE AUTHORIZATION
-                    parsedRequest.request.context.assertions = this.validateRequest(topic, parsedRequest.request.context);
-                    parsedRequest.request.context.topic = topic.substring(topic.indexOf(".") + 1);
+                    parsedRequest.context.assertions = this.validateRequest(topic, parsedRequest.context);
+                    parsedRequest.context.topic = topic.substring(topic.indexOf(".") + 1);
                     //Request is Valid, Handle the Request
-                    result = yield fnHandler(parsedRequest.request);
+                    result = yield fnHandler(parsedRequest);
                     if (typeof result !== 'object') {
                         result = {
                             status: result
