@@ -156,8 +156,8 @@ class Microservice extends NATSClient {
         return jwt.verify(token, this.messageValidator.publicKey, { algorithms: [this.messageValidator.algorithm] });
     }
     decodeToken(token) {
-        let tokenPayload = token.split(".")[1];
-        return base64url.decode(tokenPayload);
+        let decoded = jwt.decode(token, { complete: true });
+        return decoded.payload;
     }
     //PRIVATE FUNCTIONS
     validateRequest(topic, context) {

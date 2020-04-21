@@ -134,8 +134,8 @@ export class Microservice extends NATSClient {
     }
 
     decodeToken(token: any) {
-        let tokenPayload: string = token.split(".")[1];
-        return base64url.decode(tokenPayload);
+        let decoded: any = jwt.decode(token, {complete: true});
+        return decoded.payload;
     }
 
     //PRIVATE FUNCTIONS
