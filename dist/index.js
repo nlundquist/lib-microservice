@@ -78,9 +78,17 @@ class Microservice extends NATSClient {
                 queryResponse = yield _super.queryTopic.call(this, `${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringQueryData, timeoutOverride);
             else
                 queryResponse = yield _super.queryTopic.call(this, `${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringQueryData);
-            if (queryResponse)
-                return JSON.parse(queryResponse);
-            return null;
+            if (!queryResponse)
+                throw 'INVALID RESPONSE from NATS Mesh';
+            try {
+                this.emit('debug', newContext.correlationUUID, `NATS RESPONSE (${topic}): ${queryResponse}`);
+            }
+            catch (err) { }
+            //TODO ROD HERE - JSON SUPPORT?
+            let parsedResponse = JSON.parse(queryResponse);
+            if (parsedResponse.response.errors)
+                throw parsedResponse.response.errors;
+            return parsedResponse.response.result;
         });
     }
     publishEvent(topic, context, payload, topicPrefixOverride) {
