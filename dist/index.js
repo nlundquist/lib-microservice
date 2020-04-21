@@ -53,7 +53,7 @@ class Microservice extends NATSClient {
                 throw 'INVALID REQUEST: One or more of context or payload are not properly structured objects.';
             //Reset the Context to remove previously decoded information (keep it clean!)
             let newContext = {
-                correlationUUID: context.correlationUUID ? context.correlationUUID : 'No Correlation'
+                correlationUUID: context.correlationUUID ? context.correlationUUID : 'MICROSERVICE'
             };
             if (context.idToken)
                 newContext.idToken = context.idToken;
@@ -70,7 +70,7 @@ class Microservice extends NATSClient {
             //TODO ROD HERE - JSON SUPPORT?
             let stringQueryData = JSON.stringify(queryData);
             try {
-                this.emit('debug', 'no correlation', `NATS REQUEST: ${stringQueryData}`);
+                this.emit('debug', newContext.correlationUUID, `NATS REQUEST (${topic}): ${stringQueryData}`);
             }
             catch (err) { }
             let queryResponse = null;
@@ -126,14 +126,14 @@ class Microservice extends NATSClient {
                     }
                 }
                 catch (err) {
-                    let error = `Service Error(${fnHandler.name}): ${JSON.stringify(err)}`;
+                    let error = `Service Error(${fnHandler.name.substring(6)}): ${JSON.stringify(err)}`;
                     this.emit('error', 'SERVICE', error);
                     if (!errors)
                         errors = [err];
                 }
                 if (replyTo) {
                     this.publishResponse(replyTo, errors, result);
-                    this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + JSON.stringify(result));
+                    this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + JSON.stringify(errors ? errors : result));
                 }
                 else {
                     this.emit('info', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | No Response Requested');
@@ -185,7 +185,6 @@ class Microservice extends NATSClient {
         catch (err) {
             throw `UNAUTHORIZED: validateRequest Error: ${JSON.stringify(err)}`;
         }
-        console.log('TOKEN ASSERTIONS: ' + JSON.stringify(token_assertions));
         return token_assertions;
     }
     publishResponse(replyTopic, errors, result) {
