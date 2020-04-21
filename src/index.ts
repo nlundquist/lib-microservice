@@ -154,7 +154,7 @@ export class Microservice extends NATSClient {
             if(!token_assertions)                 throw "Error Decoding Ephemeral Authorization Token";
             if(token_assertions.exp < Date.now()) throw "Ephemeral Authorization Token Expired";
 
-            if(!token_assertions.ephemeralAuth || !token_assertions.authCache) throw "Invalid Ephemeral Authorization Token";
+            if(!token_assertions.ephemeralAuth) throw "Invalid Ephemeral Authorization Token";
             let ephemeralAuth = JSON.parse(base64url.decode(token_assertions.ephemeralAuth));
 
             if(!ephemeralAuth.authentication || !ephemeralAuth.authorization) throw "Invalid Ephemeral Authorization Token Payload";
