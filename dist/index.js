@@ -185,6 +185,7 @@ class Microservice extends NATSClient {
         catch (err) {
             throw `UNAUTHORIZED: validateRequest Error: ${JSON.stringify(err)}`;
         }
+        console.log('TOKEN ASSERTIONS: ' + JSON.stringify(token_assertions));
         return token_assertions;
     }
     publishResponse(replyTopic, errors, result) {
