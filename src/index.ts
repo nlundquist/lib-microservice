@@ -86,7 +86,7 @@ export class Microservice extends NATSClient {
                 let result = null;
 
                 try {
-                    this.emit('debug', 'SERVICE', 'Microservice | TopicHandler (' + topic + ') | ' + request);
+                    try{this.emit('debug', 'SERVICE', 'Microservice | TopicHandler (' + topic + ') | ' + request);}catch(err){}
 
                     //TODO ROD HERE - JSON SUPPORT?
                     let parsedRequest = request ? JSON.parse(request) : null;
@@ -111,38 +111,50 @@ export class Microservice extends NATSClient {
 
                 } catch(err) {
                     let error = `Service Error(${fnHandler.name.substring(6)}): ${JSON.stringify(err)}`;
-                    this.emit('error', 'SERVICE', error);
+                    try{this.emit('error', 'SERVICE', error);}catch(err){}
                     if(!errors) errors = [err];
                 }
 
                 if(replyTo) {
                     this.publishResponse(replyTo, errors, result);
-                    this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + JSON.stringify(errors ? errors : result));
+                    try{this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + JSON.stringify(errors ? errors : result));}catch(err){}
                 } else {
-                    this.emit('info', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | No Response Requested');
+                    try{this.emit('info', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | No Response Requested');}catch(err){}
                 }
             };
 
             super.registerTopicHandler(`${topicPrefixOverride ? topicPrefixOverride : 'MESH'}.${topic}`, topicHandler, queue);
 
         } catch(err) {
-            this.emit('error', 'SERVICE', 'Microservice | registerTopicHandler Error: ' + err);
+            try{this.emit('error', 'SERVICE', 'Microservice | registerTopicHandler Error: ' + err);}catch(err){}
         }
     }
 
     generateToken(assertions: any) {
-        if(!this.messageValidator.privateKey || !this.messageValidator.algorithm) throw "MessageValidator Not Configured";
-        return jwt.sign(assertions, this.messageValidator.privateKey, {algorithm: this.messageValidator.algorithm});
+        try {
+            if(!this.messageValidator.privateKey || !this.messageValidator.algorithm) throw "MessageValidator Not Configured";
+            return jwt.sign(assertions, this.messageValidator.privateKey, {algorithm: this.messageValidator.algorithm});
+        } catch(err) {
+            try{this.emit('error', 'MICROSERVICE', `Error Generating Ephemeral Token: ${JSON.stringify(err)}`);}catch(err){}
+        }
     }
 
     verifyToken(token: any) {
-        if(!this.messageValidator.publicKey || !this.messageValidator.algorithm) throw "MessageValidator Not Configured";
-        return jwt.verify(token, this.messageValidator.publicKey, {algorithms: [this.messageValidator.algorithm]});
+        try {
+            if(!this.messageValidator.publicKey || !this.messageValidator.algorithm) throw "MessageValidator Not Configured";
+            return jwt.verify(token, this.messageValidator.publicKey, {algorithms: [this.messageValidator.algorithm]});
+        } catch(err) {
+            try{this.emit('error', 'MICROSERVICE', `Error Verifying Ephemeral Token: ${JSON.stringify(err)}`);}catch(err){}
+        }
     }
 
     decodeToken(token: any) {
-        let decoded: any = jwt.decode(token, {complete: true});
-        return decoded.payload;
+        try {
+            let decoded: any = jwt.decode(token, {complete: true});
+            return decoded.payload;
+        } catch(err) {
+            try{this.emit('error', 'MICROSERVICE', `Error Decoding Ephemeral Token: ${JSON.stringify(err)}`);}catch(err){}
+        }
     }
 
     //PRIVATE FUNCTIONS
@@ -151,23 +163,13 @@ export class Microservice extends NATSClient {
         if(!context.ephemeralToken && !topic.endsWith("NOAUTH"))// && !topic.endsWith("INTERNAL"))
             throw 'UNAUTHORIZED: Ephemeral Authorization Token Missing';
 
-        //TODO ROD HERE
-        console.log('Looking for ephemeralToken');
-
         if(!context.ephemeralToken) return {};
-
-        //TODO ROD HERE
-        console.log('Found ephemeralToken');
 
         let token_assertions = null;
         try {
             token_assertions = (this.messageValidator.publicKey && this.messageValidator.algorithm)
                 ? this.verifyToken(context.ephemeralToken)
                 : this.decodeToken(context.ephemeralToken);
-
-            //TODO ROD HERE
-            console.log(`TOKEN_ASSERTIONS: ${JSON.stringify(token_assertions)}`);
-
 
             if(!token_assertions)                 throw "Error Decoding Ephemeral Authorization Token";
             if(token_assertions.exp < Date.now()) throw "Ephemeral Authorization Token Expired";
