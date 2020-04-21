@@ -151,13 +151,24 @@ export class Microservice extends NATSClient {
         if(!context.ephemeralToken && !topic.endsWith("NOAUTH"))// && !topic.endsWith("INTERNAL"))
             throw 'UNAUTHORIZED: Ephemeral Authorization Token Missing';
 
+        //TODO ROD HERE
+        console.log('Looking for ephemeralToken');
+
         if(!context.ephemeralToken) return {};
+
+        //TODO ROD HERE
+        console.log('Found ephemeralToken');
 
         let token_assertions = null;
         try {
             token_assertions = (this.messageValidator.publicKey && this.messageValidator.algorithm)
                 ? this.verifyToken(context.ephemeralToken)
                 : this.decodeToken(context.ephemeralToken);
+
+            //TODO ROD HERE
+            console.log(`TOKEN_ASSERTIONS: ${JSON.stringify(token_assertions)}`);
+
+
             if(!token_assertions)                 throw "Error Decoding Ephemeral Authorization Token";
             if(token_assertions.exp < Date.now()) throw "Ephemeral Authorization Token Expired";
 

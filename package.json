@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@randomrod/lib-microservice",
-  "version": "2.1.14",
+  "version": "2.1.15",
   "description": "Base-class for use in building a NATS.io-based Microservices Mesh Service components",
   "main": "dist/index.js",
   "typings": "./dist/index.d.ts",
