@@ -67,7 +67,6 @@ class Microservice extends NATSClient {
                 context: newContext,
                 payload
             };
-            //TODO ROD HERE - JSON SUPPORT?
             let stringQueryData = JSON.stringify(queryData);
             try {
                 this.emit('debug', newContext.correlationUUID, `NATS REQUEST (${topic}): ${stringQueryData}`);
@@ -84,7 +83,6 @@ class Microservice extends NATSClient {
                 this.emit('debug', newContext.correlationUUID, `NATS RESPONSE (${topic}): ${queryResponse}`);
             }
             catch (err) { }
-            //TODO ROD HERE - JSON SUPPORT?
             let parsedResponse = JSON.parse(queryResponse);
             if (parsedResponse.response.errors)
                 throw parsedResponse.response.errors;
@@ -98,7 +96,6 @@ class Microservice extends NATSClient {
             context,
             payload
         };
-        //TODO ROD HERE - JSON SUPPORT?
         let stringEventData = JSON.stringify(eventData);
         try {
             this.emit('debug', 'no correlation', `NATS PUBLISH: ${stringEventData}`);
@@ -116,7 +113,6 @@ class Microservice extends NATSClient {
                         this.emit('debug', 'SERVICE', 'Microservice | TopicHandler (' + topic + ') | ' + request);
                     }
                     catch (err) { }
-                    //TODO ROD HERE - JSON SUPPORT?
                     let parsedRequest = request ? JSON.parse(request) : null;
                     if (!parsedRequest.context || !parsedRequest.payload)
                         throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
@@ -235,7 +231,6 @@ class Microservice extends NATSClient {
         return token_assertions;
     }
     publishResponse(replyTopic, errors, result) {
-        //TODO ROD HERE - JSON SUPPORT?
         let response = JSON.stringify({
             response: {
                 errors: errors,
