@@ -12,12 +12,17 @@ export class Microservice extends NATSClient {
         publicKey:  process.env.JWT_PUBLIC_KEY  || null,
         algorithm:  process.env.JWT_ALGORITHM   || null
     };
+    seedServers: string = process.env.SEED_SERVERS || 'az1.nats.mesh,az2.nats.mesh,az3.nats.mesh';
 
     constructor(public serviceName: string) {
         super(serviceName);
     }
 
     async init() {
+        //Randomize the NATSClient Connections to the Mesh
+        let serverList = this.seedServers.split(',');
+        this.natsServer = serverList[Math.round(Math.random()*(serverList.length-1))];
+
         await super.init();
         if(!this.messageValidator.privateKey) {
             try{this.emit('debug', 'no correlation', 'Message Signing NOT Configured');}catch(err){}
