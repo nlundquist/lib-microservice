@@ -229,6 +229,8 @@ class Microservice extends NATSClient {
             let ephemeralAuth = JSON.parse(base64url.decode(token_assertions.ephemeralAuth));
             if (!ephemeralAuth.authentication || !ephemeralAuth.authorization)
                 throw "Invalid Ephemeral Authorization Token Payload";
+            if (!ephemeralAuth.authorization.superAdmin && topic.endsWith("RESTRICTED"))
+                throw "SCOPE VIOLATION: Requires SuperAdmin Access";
             token_assertions.authentication = ephemeralAuth.authentication;
             token_assertions.authorization = ephemeralAuth.authorization;
         }
