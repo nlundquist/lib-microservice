@@ -23,16 +23,19 @@ class Microservice extends NATSClient {
             publicKey: process.env.JWT_PUBLIC_KEY || null,
             algorithm: process.env.JWT_ALGORITHM || null
         };
-        this.seedServers = process.env.SEED_SERVERS || 'az1.nats.mesh,az2.nats.mesh,az3.nats.mesh';
+        this.seedServers = process.env.SEED_SERVERS || null;
     }
     init() {
         const _super = Object.create(null, {
-            init: { get: () => super.init }
+            natsServer: { get: () => super.natsServer, set: v => super.natsServer = v },
+            init: { get: () => super.init, set: v => super.init = v }
         });
         return __awaiter(this, void 0, void 0, function* () {
-            //Randomize the NATSClient Connections to the Mesh
-            let serverList = this.seedServers.split(',');
-            this.natsServer = serverList[Math.round(Math.random() * (serverList.length - 1))];
+            if (this.seedServers) {
+                //Randomize the NATSClient Connections to the Mesh
+                let serverList = this.seedServers.split(',');
+                _super.natsServer = serverList[Math.round(Math.random() * (serverList.length - 1))];
+            }
             yield _super.init.call(this);
             if (!this.messageValidator.privateKey) {
                 try {
