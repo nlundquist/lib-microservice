@@ -20,10 +20,10 @@ export class Microservice extends NATSClient {
     async init() {
         await super.init();
         if(!this.messageValidator.privateKey) {
-            try{this.emit('debug', 'no correlation', 'Message Signing NOT Configured');}catch(err){}
+            try{this.emit('info', 'no correlation', 'Message Signing NOT Configured');}catch(err){}
         }
         if(!this.messageValidator.publicKey) {
-            try{this.emit('debug', 'no correlation', 'Message Validation NOT Configured');}catch(err){}
+            try{this.emit('info', 'no correlation', 'Message Validation NOT Configured');}catch(err){}
         }
     }
 
@@ -115,7 +115,7 @@ export class Microservice extends NATSClient {
                     this.publishResponse(replyTo, errors, result);
                     try{this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + JSON.stringify(errors ? errors : result));}catch(err){}
                 } else {
-                    try{this.emit('info', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | No Response Requested');}catch(err){}
+                    try{this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | No Response Requested');}catch(err){}
                 }
             };
 

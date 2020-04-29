@@ -32,13 +32,13 @@ class Microservice extends NATSClient {
             yield _super.init.call(this);
             if (!this.messageValidator.privateKey) {
                 try {
-                    this.emit('debug', 'no correlation', 'Message Signing NOT Configured');
+                    this.emit('info', 'no correlation', 'Message Signing NOT Configured');
                 }
                 catch (err) { }
             }
             if (!this.messageValidator.publicKey) {
                 try {
-                    this.emit('debug', 'no correlation', 'Message Validation NOT Configured');
+                    this.emit('info', 'no correlation', 'Message Validation NOT Configured');
                 }
                 catch (err) { }
             }
@@ -150,7 +150,7 @@ class Microservice extends NATSClient {
                 }
                 else {
                     try {
-                        this.emit('info', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | No Response Requested');
+                        this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | No Response Requested');
                     }
                     catch (err) { }
                 }
