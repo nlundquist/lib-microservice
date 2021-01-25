@@ -13,6 +13,7 @@ const base64url = require("base64url");
 const EventEmitter = require("events");
 const jwt = require("jsonwebtoken");
 const { NATSClient } = require("@randomrod/lib-nats-client");
+const uuid = require("uuid");
 const CLIENT_PREFIX = 'CLIENT';
 class Microservice extends NATSClient {
     constructor(serviceName) {
@@ -42,6 +43,7 @@ class Microservice extends NATSClient {
                 }
                 catch (err) { }
             }
+            this.registerTestHandlers();
         });
     }
     queryTopic(topic, context, payload, timeoutOverride, topicPrefixOverride) {
@@ -78,7 +80,7 @@ class Microservice extends NATSClient {
             else
                 queryResponse = yield _super.queryTopic.call(this, `${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringQueryData);
             if (!queryResponse)
-                throw 'INVALID RESPONSE from NATS Mesh';
+                throw `INVALID RESPONSE (${topic}) from NATS Mesh`;
             try {
                 this.emit('debug', newContext.correlationUUID, `NATS RESPONSE (${topic}): ${queryResponse}`);
             }
@@ -98,7 +100,7 @@ class Microservice extends NATSClient {
         };
         let stringEventData = JSON.stringify(eventData);
         try {
-            this.emit('debug', 'no correlation', `NATS PUBLISH: ${stringEventData}`);
+            this.emit('debug', 'no correlation', `NATS PUBLISH (${topic}): ${stringEventData}`);
         }
         catch (err) { }
         return super.publishTopic(`${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringEventData);
@@ -108,6 +110,7 @@ class Microservice extends NATSClient {
             let topicHandler = (request, replyTo, topic) => __awaiter(this, void 0, void 0, function* () {
                 let errors = null;
                 let result = null;
+                let topicStart = Date.now();
                 try {
                     try {
                         this.emit('debug', 'SERVICE', 'Microservice | TopicHandler (' + topic + ') | ' + request);
@@ -141,16 +144,17 @@ class Microservice extends NATSClient {
                     if (!errors)
                         errors = [err];
                 }
+                let topicDuration = Date.now() - topicStart;
                 if (replyTo) {
                     this.publishResponse(replyTo, errors, result);
                     try {
-                        this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + JSON.stringify(errors ? errors : result));
+                        this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + topicDuration.toString() + 'ms | ' + JSON.stringify(errors ? errors : result));
                     }
                     catch (err) { }
                 }
                 else {
                     try {
-                        this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | No Response Requested');
+                        this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + topicDuration.toString() + 'ms | No Response Requested');
                     }
                     catch (err) { }
                 }
@@ -159,7 +163,7 @@ class Microservice extends NATSClient {
         }
         catch (err) {
             try {
-                this.emit('error', 'SERVICE', 'Microservice | registerTopicHandler Error: ' + err);
+                this.emit('error', 'SERVICE', 'Microservice | registerTopicHandler (' + topic + ') Error: ' + err);
             }
             catch (err) { }
         }
@@ -240,6 +244,119 @@ class Microservice extends NATSClient {
             }
         });
         return super.publishTopic(replyTopic, response);
+    }
+    //***************************************************
+    // TOPOLOGY TEST Functions
+    //***************************************************
+    scanToplogy(request) {
+        const _super = Object.create(null, {
+            queryTopic: { get: () => super.queryTopic }
+        });
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!request.payload.testID)
+                throw 'No Test ID specified';
+            if (!request.payload.nodes)
+                throw 'No Test Nodes specified';
+            let scanResult = {
+                testStart: Date.now(),
+            };
+            let nodeResults = [];
+            let testRequest = JSON.stringify({ testID: request.payload.testID });
+            for (let node of request.payload.nodes) {
+                let nodeStart = Date.now();
+                let nodeResult = { node };
+                let queryResponse = yield _super.queryTopic.call(this, `TEST.${node}.ping.validate`, testRequest, 1000);
+                nodeResult.duration = Date.now() - nodeStart;
+                if (!queryResponse) {
+                    nodeResult.result = `NO RESPONSE`;
+                }
+                else {
+                    let parsedResponse = JSON.parse(queryResponse);
+                    if (parsedResponse.response.errors) {
+                        let errorString = JSON.stringify(parsedResponse.response.errors);
+                        if (errorString.indexOf('TIMEOUT') >= 0)
+                            nodeResult.result = 'TIMEOUT';
+                        else
+                            nodeResult.result = 'errorString';
+                    }
+                    else if (!parsedResponse.response.result) {
+                        nodeResult.result = 'NO RESULT';
+                    }
+                    else {
+                        if (parsedResponse.response.result.testID = request.payload.testID)
+                            nodeResult.result = 'OK';
+                        else
+                            nodeResult.result = 'UNCORRELATED';
+                    }
+                }
+                nodeResults.push(nodeResult);
+            }
+            scanResult.testEnd = Date.now();
+            scanResult.duration = scanResult.testStart - scanResult.testEnd;
+            scanResult.nodeResults = nodeResults;
+            return scanResult;
+        });
+    }
+    validateNode(request) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return { testID: request.payload.testID };
+        });
+    }
+    registerTestHandlers() {
+        let instanceID = uuid.v4();
+        let initiatorTopic = `TEST.${this.serviceName}.${instanceID}.ping.initiate`;
+        this.registerTestHandler(initiatorTopic, this.scanToplogy.bind(this), instanceID);
+        let validatorTopic = `TEST.${this.serviceName}.${instanceID}.ping.validate`;
+        this.registerTestHandler(validatorTopic, this.validateNode.bind(this), instanceID);
+    }
+    registerTestHandler(topic, fnHandler, queue = null) {
+        try {
+            let topicHandler = (request, replyTo, topic) => __awaiter(this, void 0, void 0, function* () {
+                let errors = null;
+                let result = null;
+                let topicStart = Date.now();
+                try {
+                    try {
+                        this.emit('debug', 'SERVICE TEST', 'Microservice | TopicHandler (' + topic + ') | ' + request);
+                    }
+                    catch (err) { }
+                    let parsedRequest = request ? JSON.parse(request) : null;
+                    if (!parsedRequest.context || !parsedRequest.payload)
+                        throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
+                    result = yield fnHandler(parsedRequest);
+                }
+                catch (err) {
+                    let error = `Test Error(${topic}): ${JSON.stringify(err)}`;
+                    try {
+                        this.emit('error', 'SERVICE TEST', error);
+                    }
+                    catch (err) { }
+                    if (!errors)
+                        errors = [err];
+                }
+                let topicDuration = Date.now() - topicStart;
+                if (replyTo) {
+                    this.publishResponse(replyTo, errors, result);
+                    try {
+                        this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + topicDuration.toString() + 'ms | ' + JSON.stringify(errors ? errors : result));
+                    }
+                    catch (err) { }
+                }
+                else {
+                    try {
+                        this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + topicDuration.toString() + 'ms | No Response Requested');
+                    }
+                    catch (err) { }
+                }
+            });
+            super.registerTopicHandler(topic, topicHandler, queue);
+        }
+        catch (err) {
+            try {
+                this.emit('error', 'SERVICE TEST', 'Microservice | registerTopicHandler (' + topic + ') Error: ' + err);
+            }
+            catch (err) { }
+        }
     }
 }
 exports.Microservice = Microservice;
