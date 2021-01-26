@@ -243,7 +243,7 @@ export class Microservice extends NATSClient {
         }
 
         scanResult.testEnd = Date.now();
-        scanResult.duration = scanResult.testStart - scanResult.testEnd;
+        scanResult.duration = scanResult.testEnd - scanResult.testStart;
         scanResult.nodeResults = nodeResults;
         return scanResult;
     }
