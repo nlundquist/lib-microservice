@@ -212,7 +212,7 @@ export class Microservice extends NATSClient {
         };
 
         let nodeResults: any[] = [];
-        let testRequest = JSON.stringify({ testID: request.payload.testID });
+        let testRequest = JSON.stringify({ context: request.context, payload: { testID: request.payload.testID }});
         for(let node of request.payload.nodes) {
 
             let nodeStart = Date.now();
@@ -229,7 +229,7 @@ export class Microservice extends NATSClient {
                     if(errorString.indexOf('TIMEOUT') >= 0)
                         nodeResult.result = 'TIMEOUT';
                     else
-                        nodeResult.result = 'errorString';
+                        nodeResult.result = `${errorString}`;
                 } else if(!parsedResponse.response.result) {
                     nodeResult.result = 'NO RESULT';
                 } else {
