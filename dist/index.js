@@ -265,7 +265,7 @@ class Microservice extends NATSClient {
             for (let node of request.payload.nodes) {
                 let nodeStart = Date.now();
                 let nodeResult = { node };
-                let queryResponse = yield _super.queryTopic.call(this, `TEST.${node}.ping.validate`, testRequest, 1000);
+                let queryResponse = yield _super.queryTopic.call(this, `TEST.${node}.ping.validate`, testRequest, 100);
                 nodeResult.duration = Date.now() - nodeStart;
                 if (!queryResponse) {
                     nodeResult.result = `NO RESPONSE`;

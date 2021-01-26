@@ -217,7 +217,7 @@ export class Microservice extends NATSClient {
 
             let nodeStart = Date.now();
             let nodeResult: any = { node };
-            let queryResponse = await super.queryTopic(`TEST.${node}.ping.validate`, testRequest, 1000);
+            let queryResponse = await super.queryTopic(`TEST.${node}.ping.validate`, testRequest, 100);
 
             nodeResult.duration = Date.now() - nodeStart;
             if(!queryResponse) {
