@@ -6,6 +6,12 @@ const { NATSClient }    = require("@randomrod/lib-nats-client");
 const uuid              = require("uuid");
 
 const CLIENT_PREFIX = 'CLIENT';
+const MESH_PREFIX   = 'MESH';
+
+const SUPERADMIN    = 'superAdmin';
+const OWNER_SCOPE   = 'OWNER';
+
+const QUERY_TIMEOUT = 7500;
 
 export class Microservice extends NATSClient {
     messageValidator: any = {
@@ -29,31 +35,23 @@ export class Microservice extends NATSClient {
         this.registerTestHandlers();
     }
 
-    async queryTopic(topic: string, context: any, payload: any, timeoutOverride?: number, topicPrefixOverride?: string) {
+    async queryTopic(topic: string, context: any, payload: any, queryTimeout: number = QUERY_TIMEOUT, topicPrefix: string = CLIENT_PREFIX) {
         if(typeof context !== 'object' || typeof payload !== 'object')
             throw 'INVALID REQUEST: One or more of context or payload are not properly structured objects.';
 
         //Reset the Context to remove previously decoded information (keep it clean!)
         let newContext: any = {
-            correlationUUID: context.correlationUUID ? context.correlationUUID : 'MICROSERVICE'
-        };
-        if(context.idToken) newContext.idToken = context.idToken;
-        if(context.serviceToken) newContext.serviceToken = context.serviceToken;
-        if(context.impersonationToken) newContext.impersonationToken = context.impersonationToken;
-        if(context.ephemeralToken) newContext.ephemeralToken = context.ephemeralToken;
-
-        let queryData = {
-            context: newContext,
-            payload
+            correlationUUID:    context.correlationUUID     || 'MICROSERVICE',
+            idToken:            context.idToken             || null,
+            serviceToken:       context.serviceToken        || null,
+            impersonationToken: context.impersonationToken  || null,
+            ephemeralToken:     context.ephemeralToken      || null,
         };
 
-        let stringQueryData = JSON.stringify(queryData);
-        try{this.emit('debug', newContext.correlationUUID, `NATS REQUEST (${topic}): ${stringQueryData}`);}catch(err){}
+        let queryData = JSON.stringify({ context: newContext, payload });
+        try{this.emit('debug', newContext.correlationUUID, `NATS REQUEST (${topic}): ${queryData}`);}catch(err){}
 
-        let queryResponse = null;
-        if(timeoutOverride) queryResponse = await super.queryTopic(`${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringQueryData, timeoutOverride);
-        else queryResponse = await super.queryTopic(`${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringQueryData);
-
+        let queryResponse = await super.queryTopic(`${topicPrefix}.${topic}`, queryData, queryTimeout);
         if(!queryResponse) throw `INVALID RESPONSE (${topic}) from NATS Mesh`;
 
         try{this.emit('debug', newContext.correlationUUID, `NATS RESPONSE (${topic}): ${queryResponse}`);}catch(err){}
@@ -63,22 +61,17 @@ export class Microservice extends NATSClient {
         return parsedResponse.response.result;
     }
 
-    publishEvent(topic: string, context: any, payload: any, topicPrefixOverride?: string) {
+    publishEvent(topic: string, context: any, payload: any, topicPrefix: string = CLIENT_PREFIX) {
         if(typeof context !== 'object' || typeof payload !== 'object')
             throw 'INVALID REQUEST: One or more of context or payload are not properly structured objects.';
 
-        let eventData = {
-            context,
-            payload
-        };
+        let eventData = JSON.stringify({ context, payload });
+        try{this.emit('debug', 'no correlation', `NATS PUBLISH (${topic}): ${eventData}`);}catch(err){}
 
-        let stringEventData = JSON.stringify(eventData);
-        try{this.emit('debug', 'no correlation', `NATS PUBLISH (${topic}): ${stringEventData}`);}catch(err){}
-
-        return super.publishTopic(`${topicPrefixOverride ? topicPrefixOverride : CLIENT_PREFIX}.${topic}`, stringEventData);
+        return super.publishTopic(`${topicPrefix}.${topic}`, eventData);
     }
 
-    registerTopicHandler(topic: string, fnHandler: any, queue: any = null, topicPrefixOverride?: string) {
+    registerTopicHandler(topic: string, fnHandler: any, minScopeRequired: string = SUPERADMIN, queue: string | null = null, topicPrefix: string = MESH_PREFIX) {
         try {
             let topicHandler = async (request: string, replyTo: string, topic: string) => {
                 let errors = null;
@@ -93,7 +86,7 @@ export class Microservice extends NATSClient {
                         throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
 
                     //Verify MESSAGE AUTHORIZATION
-                    parsedRequest.context.assertions = this.validateRequest(topic, parsedRequest.context);
+                    parsedRequest.context.assertions = this.validateRequest(topic, parsedRequest.context, minScopeRequired);
                     parsedRequest.context.topic = topic.substring(topic.indexOf(".")+1);
 
                     //Request is Valid, Handle the Request
@@ -124,7 +117,7 @@ export class Microservice extends NATSClient {
                 }
             };
 
-            super.registerTopicHandler(`${topicPrefixOverride ? topicPrefixOverride : 'MESH'}.${topic}`, topicHandler, queue);
+            super.registerTopicHandler(`${topicPrefix}.${topic}`, topicHandler, queue);
 
         } catch(err) {
             try{this.emit('error', 'SERVICE', 'Microservice | registerTopicHandler (' + topic + ') Error: ' + err);}catch(err){}
@@ -159,7 +152,7 @@ export class Microservice extends NATSClient {
     }
 
     //PRIVATE FUNCTIONS
-    private validateRequest(topic: string, context: any) {
+    private validateRequest(topic: string, context: any, minScopeRequired: string = OWNER_SCOPE) {
 
         if(!context.ephemeralToken && !topic.endsWith("NOAUTH"))// && !topic.endsWith("INTERNAL"))
             throw 'UNAUTHORIZED: Ephemeral Authorization Token Missing';
@@ -179,15 +172,65 @@ export class Microservice extends NATSClient {
             let ephemeralAuth = JSON.parse(base64url.decode(token_assertions.ephemeralAuth));
 
             if(!ephemeralAuth.authentication || !ephemeralAuth.authorization) throw "Invalid Ephemeral Authorization Token Payload";
-            if(!ephemeralAuth.authorization.superAdmin && topic.endsWith("RESTRICTED")) throw "SCOPE VIOLATION: Requires SuperAdmin Access";
 
             token_assertions.authentication = ephemeralAuth.authentication;
             token_assertions.authorization = ephemeralAuth.authorization;
+            token_assertions.scopeRestriction = this.authorizeScope(token_assertions, minScopeRequired, topic);
 
         } catch(err) {
             throw `UNAUTHORIZED: validateRequest Error: ${JSON.stringify(err)}`;
         }
         return token_assertions;
+    }
+
+    private authorizeScope(assertions: any, minScopeRequired: string, topic: string) {
+        if(topic.endsWith("RESTRICTED") && !assertions.authorization.superAdmin)
+            throw 'UNAUTHORIZED:  Requires SUPERADMIN Privileges';
+
+        switch(minScopeRequired) {
+            case 'superAdmin':
+                if(!assertions.authorization.superAdmin)  throw 'UNAUTHORIZED:  Requires SUPERADMIN Privileges';
+                break;
+            case '*':
+                if(assertions.authorization.scope !== '*')  throw 'UNAUTHORIZED:  Requires GLOBAL Permission Scope';
+                break;
+
+            case 'SITE':
+                if( assertions.authorization.scope !== '*' &&
+                    assertions.authorization.scope !== 'SITE')  throw 'UNAUTHORIZED:  Requires SITE Permission Scope or Greater';
+                break;
+
+            case 'MEMBER':
+                if( assertions.authorization.scope !== '*' &&
+                    assertions.authorization.scope !== 'SITE' &&
+                    assertions.authorization.scope !== 'MEMBER')  throw 'UNAUTHORIZED:  Requires MEMBER Permission Scope or Greater';
+                break;
+
+            case 'OWNER':
+                if( assertions.authorization.scope !== '*' &&
+                    assertions.authorization.scope !== 'SITE' &&
+                    assertions.authorization.scope !== 'MEMBER' &&
+                    assertions.authorization.scope !== 'OWNER')  throw 'UNAUTHORIZED:  Requires OWNER Permission Scope or Greater';
+                break;
+
+            default:
+                throw 'SERVER ERROR:  Invalid Scope Requirement';
+        }
+
+        let scopeRestriction: any = null;
+        switch(assertions.authorization.scope) {
+            case "SITE":
+                scopeRestriction = { site_id: assertions.authentication.site_id };
+                break;
+
+            case "MEMBER":
+                scopeRestriction = { member_id: assertions.authentication.member_id };
+                break;
+
+            case "OWNER":
+                scopeRestriction = { user_id: assertions.authentication.user_id };
+        }
+        return scopeRestriction;
     }
 
     private publishResponse(replyTopic: string, errors: any, result: any) {

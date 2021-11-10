@@ -5,9 +5,9 @@ declare class Microservice {
     init(): Promise<void>;
     shutdown(): void;
 
-    publishEvent(topic: string, context: any, payload: any, topicPrefixOverride?: string): void;
-    queryTopic(topic: string, context: any, payload: any, timeoutOverride?: number, topicPrefixOverride?: string): Promise<any>;
-    registerTopicHandler(topic: string, fnHandler: any, queue: any, topicPrefixOverride?: string): void;
+    publishEvent(topic: string, context: any, payload: any, topicPrefix: string): void;
+    queryTopic(topic: string, context: any, payload: any, queryTimeout: number, topicPrefix: string): Promise<any>;
+    registerTopicHandler(topic: string, fnHandler: any, minScopeRequired: string, queue: string | null, topicPrefix: string): void;
     generateToken(assertions: any): any;
     verifyToken(token: any): any;
     decodeToken(token: any): any;
