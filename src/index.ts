@@ -159,7 +159,7 @@ export class Microservice extends NATSClient {
 
         if(!context.ephemeralToken) return {};
 
-        let token_assertions = null;
+        let token_assertions: any = null;
         try {
             token_assertions = (this.messageValidator.publicKey && this.messageValidator.algorithm)
                 ? this.verifyToken(context.ephemeralToken)
@@ -176,6 +176,10 @@ export class Microservice extends NATSClient {
             token_assertions.authentication = ephemeralAuth.authentication;
             token_assertions.authorization = ephemeralAuth.authorization;
             token_assertions.scopeRestriction = this.authorizeScope(token_assertions, minScopeRequired, topic);
+            token_assertions.scope = (topic: string) => {
+                if(token_assertions.authorization.superAdmin) return '*';
+                return token_assertions.authorization.permissions[topic] || 'NONE';
+            };
 
         } catch(err) {
             throw `UNAUTHORIZED: validateRequest Error: ${JSON.stringify(err)}`;
