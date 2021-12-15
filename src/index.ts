@@ -9,8 +9,6 @@ const CLIENT_PREFIX = 'CLIENT';
 const MESH_PREFIX   = 'MESH';
 
 const SUPERADMIN    = 'superAdmin';
-const OWNER_SCOPE   = 'OWNER';
-
 const QUERY_TIMEOUT = 7500;
 
 export class Microservice extends NATSClient {
@@ -154,7 +152,7 @@ export class Microservice extends NATSClient {
     }
 
     //PRIVATE FUNCTIONS
-    private validateRequest(topic: string, context: any, minScopeRequired: string = OWNER_SCOPE) {
+    private validateRequest(topic: string, context: any, minScopeRequired: string) {
 
         if(!context.ephemeralToken && !topic.endsWith("NOAUTH"))// && !topic.endsWith("INTERNAL"))
             throw 'UNAUTHORIZED: Ephemeral Authorization Token Missing';

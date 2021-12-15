@@ -17,7 +17,6 @@ const uuid = require("uuid");
 const CLIENT_PREFIX = 'CLIENT';
 const MESH_PREFIX = 'MESH';
 const SUPERADMIN = 'superAdmin';
-const OWNER_SCOPE = 'OWNER';
 const QUERY_TIMEOUT = 7500;
 class Microservice extends NATSClient {
     constructor(serviceName) {
@@ -196,7 +195,7 @@ class Microservice extends NATSClient {
         }
     }
     //PRIVATE FUNCTIONS
-    validateRequest(topic, context, minScopeRequired = OWNER_SCOPE) {
+    validateRequest(topic, context, minScopeRequired) {
         if (!context.ephemeralToken && !topic.endsWith("NOAUTH")) // && !topic.endsWith("INTERNAL"))
             throw 'UNAUTHORIZED: Ephemeral Authorization Token Missing';
         if (!context.ephemeralToken)
