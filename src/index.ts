@@ -8,7 +8,7 @@ const uuid              = require("uuid");
 const CLIENT_PREFIX = 'CLIENT';
 const MESH_PREFIX   = 'MESH';
 
-const SUPERADMIN    = 'superAdmin';
+const SUPERADMIN    = 'SUPERADMIN';
 const QUERY_TIMEOUT = 7500;
 
 export class Microservice extends NATSClient {
@@ -192,7 +192,7 @@ export class Microservice extends NATSClient {
             throw 'UNAUTHORIZED:  Requires SUPERADMIN Privileges';
 
         switch(minScopeRequired) {
-            case 'superAdmin':
+            case 'SUPERADMIN':
                 if(!assertions.authorization.superAdmin)  throw 'UNAUTHORIZED:  Requires SUPERADMIN Privileges';
                 break;
             case '*':
