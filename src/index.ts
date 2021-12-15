@@ -14,6 +14,8 @@ const OWNER_SCOPE   = 'OWNER';
 const QUERY_TIMEOUT = 7500;
 
 export class Microservice extends NATSClient {
+    sourceVersion: string = process.env.SOURCE_VERSION || 'LOCAL';
+
     messageValidator: any = {
         privateKey: process.env.JWT_PRIVATE_KEY || null,
         publicKey:  process.env.JWT_PUBLIC_KEY  || null,
@@ -32,7 +34,7 @@ export class Microservice extends NATSClient {
         if(!this.messageValidator.publicKey) {
             try{this.emit('info', 'no correlation', 'Message Validation NOT Configured');}catch(err){}
         }
-        this.registerTestHandlers();
+        this.registerTestHandler();
     }
 
     async queryTopic(topic: string, context: any, payload: any, queryTimeout: number = QUERY_TIMEOUT, topicPrefix: string = CLIENT_PREFIX) {
@@ -295,34 +297,26 @@ export class Microservice extends NATSClient {
         return scanResult;
     }
 
-    async validateNode(request: any) {
-        return { testID: request.payload.testID };
+    async versionNode(request: any) {
+        return { version: this.sourceVersion };
     }
 
-    private registerTestHandlers() {
+    private registerTestHandler() {
         let instanceID = uuid.v4();
-        let initiatorTopic = `TEST.${this.serviceName}.${instanceID}.ping.initiate`;
-        this.registerTestHandler(initiatorTopic, this.scanToplogy.bind(this), instanceID);
+        let testTopic = `TEST.${this.serviceName}.${instanceID}`;
 
-        let validatorTopic = `TEST.${this.serviceName}.${instanceID}.ping.validate`;
-        this.registerTestHandler(validatorTopic, this.validateNode.bind(this), instanceID);
-    }
-
-    private registerTestHandler(topic: string, fnHandler: any, queue: any = null) {
         try {
             let topicHandler = async (request: string, replyTo: string, topic: string) => {
                 let errors = null;
                 let result = null;
-                let topicStart = Date.now();
 
                 try {
                     try{this.emit('debug', 'SERVICE TEST', 'Microservice | TopicHandler (' + topic + ') | ' + request);}catch(err){}
 
                     let parsedRequest = request ? JSON.parse(request) : null;
-                    if(!parsedRequest.context || !parsedRequest.payload )
-                        throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
+                    if(!parsedRequest) throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
 
-                    result = await fnHandler(parsedRequest);
+                    result = await this.versionNode(parsedRequest);
 
                 } catch(err) {
                     let error = `Test Error(${topic}): ${JSON.stringify(err)}`;
@@ -330,20 +324,18 @@ export class Microservice extends NATSClient {
                     if(!errors) errors = [err];
                 }
 
-                let topicDuration = Date.now() - topicStart;
-
                 if(replyTo) {
                     this.publishResponse(replyTo, errors, result);
-                    try{this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + topicDuration.toString() + 'ms | ' + JSON.stringify(errors ? errors : result));}catch(err){}
+                    try{this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + JSON.stringify(errors ? errors : result));}catch(err){}
                 } else {
-                    try{this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + topicDuration.toString() + 'ms | No Response Requested');}catch(err){}
+                    try{this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | No Response Requested');}catch(err){}
                 }
             };
 
-            super.registerTopicHandler(topic, topicHandler, queue);
+            super.registerTopicHandler(testTopic, topicHandler, instanceID);
 
         } catch(err) {
-            try{this.emit('error', 'SERVICE TEST', 'Microservice | registerTopicHandler (' + topic + ') Error: ' + err);}catch(err){}
+            try{this.emit('error', 'SERVICE TEST', 'Microservice | registerTopicHandler (' + testTopic + ') Error: ' + err);}catch(err){}
         }
     }
 
