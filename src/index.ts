@@ -218,7 +218,7 @@ export class Microservice extends NATSClient {
                 break;
 
             default:
-                throw 'SERVER ERROR:  Invalid Scope Requirement';
+                throw `SERVER ERROR:  Invalid Scope Requirement (${minScopeRequired})`;
         }
 
         let scopeRestriction: any = null;
