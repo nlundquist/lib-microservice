@@ -1,15 +1,23 @@
-"use strict";
-const base64url         = require("base64url");
-const EventEmitter      = require("events");
-const jwt               = require("jsonwebtoken");
-const { NATSClient }    = require("@randomrod/lib-nats-client");
-const uuid              = require("uuid");
+import { NATSClient, NATSTopicHandler }     from '@randomrod/lib-nats-client';
+import base64url                            from 'base64url';
+
+const jwt                                   = require('jsonwebtoken');
+const uuid                                  = require('uuid');
 
 const CLIENT_PREFIX = 'CLIENT';
 const MESH_PREFIX   = 'MESH';
 
 const SUPERADMIN    = 'SUPERADMIN';
 const QUERY_TIMEOUT = 7500;
+
+export interface ServiceRequest {
+    context: any,
+    payload: any
+}
+
+export interface ServiceHandler {
+    (request: ServiceRequest): Promise<any>;
+}
 
 export class Microservice extends NATSClient {
     sourceVersion: string = process.env.SOURCE_VERSION || 'LOCAL';
@@ -20,11 +28,11 @@ export class Microservice extends NATSClient {
         algorithm:  process.env.JWT_ALGORITHM   || null
     };
 
-    constructor(public serviceName: string) {
+    constructor(serviceName: string) {
         super(serviceName);
     }
 
-    async init() {
+    async init(): Promise<void> {
         await super.init();
         if(!this.messageValidator.privateKey) {
             try{this.emit('info', 'no correlation', 'Message Signing NOT Configured');}catch(err){}
@@ -35,7 +43,7 @@ export class Microservice extends NATSClient {
         this.registerTestHandler();
     }
 
-    async queryTopic(topic: string, context: any, payload: any, queryTimeout: number = QUERY_TIMEOUT, topicPrefix: string = CLIENT_PREFIX) {
+    async query(topic: string, context: any, payload: any, queryTimeout: number = QUERY_TIMEOUT, topicPrefix: string = CLIENT_PREFIX): Promise<any> {
         if(typeof context !== 'object' || typeof payload !== 'object')
             throw 'INVALID REQUEST: One or more of context or payload are not properly structured objects.';
 
@@ -43,15 +51,13 @@ export class Microservice extends NATSClient {
         let newContext: any = {
             correlationUUID:    context.correlationUUID     || 'MICROSERVICE',
             idToken:            context.idToken             || null,
-            serviceToken:       context.serviceToken        || null,
-            impersonationToken: context.impersonationToken  || null,
             ephemeralToken:     context.ephemeralToken      || null,
         };
 
         let queryData = JSON.stringify({ context: newContext, payload });
         try{this.emit('debug', newContext.correlationUUID, `NATS REQUEST (${topic}): ${queryData}`);}catch(err){}
 
-        let queryResponse = await super.queryTopic(`${topicPrefix}.${topic}`, queryData, queryTimeout);
+        let queryResponse: string = await super.queryTopic(`${topicPrefix}.${topic}`, queryData, queryTimeout);
         if(!queryResponse) throw `INVALID RESPONSE (${topic}) from NATS Mesh`;
 
         try{this.emit('debug', newContext.correlationUUID, `NATS RESPONSE (${topic}): ${queryResponse}`);}catch(err){}
@@ -61,7 +67,7 @@ export class Microservice extends NATSClient {
         return parsedResponse.response.result;
     }
 
-    publishEvent(topic: string, context: any, payload: any, topicPrefix: string = CLIENT_PREFIX) {
+    publish(topic: string, context: any, payload: any, topicPrefix: string = CLIENT_PREFIX): void {
         if(typeof context !== 'object' || typeof payload !== 'object')
             throw 'INVALID REQUEST: One or more of context or payload are not properly structured objects.';
 
@@ -71,9 +77,9 @@ export class Microservice extends NATSClient {
         return super.publishTopic(`${topicPrefix}.${topic}`, eventData);
     }
 
-    registerTopicHandler(topic: string, fnHandler: any, minScopeRequired: string = SUPERADMIN, queue: string | null = null, topicPrefix: string = MESH_PREFIX) {
+    registerHandler(topic: string, fnHandler: ServiceHandler, minScopeRequired: string = SUPERADMIN, queue: string | null = null, topicPrefix: string = MESH_PREFIX): void {
         try {
-            let topicHandler = async (request: string, replyTo: string, topic: string) => {
+            let topicHandler: NATSTopicHandler = async (request: string, replyTo: string, topic: string): Promise<void> => {
                 let errors = null;
                 let result = null;
                 let topicStart = Date.now();
@@ -81,8 +87,8 @@ export class Microservice extends NATSClient {
                 try {
                     try{this.emit('debug', 'SERVICE', 'Microservice | TopicHandler (' + topic + ') | ' + request);}catch(err){}
 
-                    let parsedRequest = request ? JSON.parse(request) : null;
-                    if(!parsedRequest.context || !parsedRequest.payload )
+                    let parsedRequest: ServiceRequest = request ? JSON.parse(request) : null;
+                    if(!parsedRequest?.context || !parsedRequest?.payload )
                         throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
 
                     //Verify MESSAGE AUTHORIZATION
@@ -248,73 +254,28 @@ export class Microservice extends NATSClient {
     }
 
     //***************************************************
-    // TOPOLOGY TEST Functions
+    // TEST Function
     //***************************************************
-    async scanToplogy(request: any) {
-        if(!request.payload.testID) throw 'No Test ID specified';
-        if(!request.payload.nodes)  throw 'No Test Nodes specified';
-
-        let scanResult: any = {
-            testStart: Date.now(),
-        };
-
-        let nodeResults: any[] = [];
-        let testRequest = JSON.stringify({ context: request.context, payload: { testID: request.payload.testID }});
-        for(let node of request.payload.nodes) {
-
-            let nodeStart = Date.now();
-            let nodeResult: any = { node };
-            let queryResponse = await super.queryTopic(`TEST.${node}.ping.validate`, testRequest, 100);
-
-            nodeResult.duration = Date.now() - nodeStart;
-            if(!queryResponse) {
-                nodeResult.result = `NO RESPONSE`;
-            } else {
-                let parsedResponse = JSON.parse(queryResponse);
-                if(parsedResponse.response.errors) {
-                    let errorString = JSON.stringify(parsedResponse.response.errors);
-                    if(errorString.indexOf('TIMEOUT') >= 0)
-                        nodeResult.result = 'TIMEOUT';
-                    else
-                        nodeResult.result = `${errorString}`;
-                } else if(!parsedResponse.response.result) {
-                    nodeResult.result = 'NO RESULT';
-                } else {
-                    if(parsedResponse.response.result.testID = request.payload.testID)
-                        nodeResult.result = 'OK';
-                    else
-                        nodeResult.result = 'UNCORRELATED';
-                }
-            }
-            nodeResults.push(nodeResult);
-        }
-
-        scanResult.testEnd = Date.now();
-        scanResult.duration = scanResult.testEnd - scanResult.testStart;
-        scanResult.nodeResults = nodeResults;
-        return scanResult;
-    }
-
-    async versionNode(request: any) {
+    private async versionNode() {
         return { version: this.sourceVersion };
     }
 
     private registerTestHandler() {
-        let instanceID = uuid.v4();
-        let testTopic = `TEST.${this.serviceName}.${instanceID}`;
+        let instanceID: string = uuid.v4();
+        let testTopic: string = `TEST.${this.serviceName}.${instanceID}`;
 
         try {
-            let topicHandler = async (request: string, replyTo: string, topic: string) => {
+            let topicHandler: NATSTopicHandler = async (request: string, replyTo: string, topic: string): Promise<void> => {
                 let errors = null;
                 let result = null;
 
                 try {
                     try{this.emit('debug', 'SERVICE TEST', 'Microservice | TopicHandler (' + topic + ') | ' + request);}catch(err){}
 
-                    let parsedRequest = request ? JSON.parse(request) : null;
+                    let parsedRequest: ServiceRequest = request ? JSON.parse(request) : null;
                     if(!parsedRequest) throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
 
-                    result = await this.versionNode(parsedRequest);
+                    result = await this.versionNode();
 
                 } catch(err) {
                     let error = `Test Error(${topic}): ${JSON.stringify(err)}`;

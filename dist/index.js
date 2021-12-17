@@ -1,27 +1,14 @@
-"use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const base64url = require("base64url");
-const EventEmitter = require("events");
-const jwt = require("jsonwebtoken");
-const { NATSClient } = require("@randomrod/lib-nats-client");
-const uuid = require("uuid");
+import { NATSClient } from '@randomrod/lib-nats-client';
+import base64url from 'base64url';
+const jwt = require('jsonwebtoken');
+const uuid = require('uuid');
 const CLIENT_PREFIX = 'CLIENT';
 const MESH_PREFIX = 'MESH';
-const SUPERADMIN = 'superAdmin';
+const SUPERADMIN = 'SUPERADMIN';
 const QUERY_TIMEOUT = 7500;
-class Microservice extends NATSClient {
+export class Microservice extends NATSClient {
     constructor(serviceName) {
         super(serviceName);
-        this.serviceName = serviceName;
         this.sourceVersion = process.env.SOURCE_VERSION || 'LOCAL';
         this.messageValidator = {
             privateKey: process.env.JWT_PRIVATE_KEY || null,
@@ -29,61 +16,48 @@ class Microservice extends NATSClient {
             algorithm: process.env.JWT_ALGORITHM || null
         };
     }
-    init() {
-        const _super = Object.create(null, {
-            init: { get: () => super.init }
-        });
-        return __awaiter(this, void 0, void 0, function* () {
-            yield _super.init.call(this);
-            if (!this.messageValidator.privateKey) {
-                try {
-                    this.emit('info', 'no correlation', 'Message Signing NOT Configured');
-                }
-                catch (err) { }
-            }
-            if (!this.messageValidator.publicKey) {
-                try {
-                    this.emit('info', 'no correlation', 'Message Validation NOT Configured');
-                }
-                catch (err) { }
-            }
-            this.registerTestHandler();
-        });
-    }
-    queryTopic(topic, context, payload, queryTimeout = QUERY_TIMEOUT, topicPrefix = CLIENT_PREFIX) {
-        const _super = Object.create(null, {
-            queryTopic: { get: () => super.queryTopic }
-        });
-        return __awaiter(this, void 0, void 0, function* () {
-            if (typeof context !== 'object' || typeof payload !== 'object')
-                throw 'INVALID REQUEST: One or more of context or payload are not properly structured objects.';
-            //Reset the Context to remove previously decoded information (keep it clean!)
-            let newContext = {
-                correlationUUID: context.correlationUUID || 'MICROSERVICE',
-                idToken: context.idToken || null,
-                serviceToken: context.serviceToken || null,
-                impersonationToken: context.impersonationToken || null,
-                ephemeralToken: context.ephemeralToken || null,
-            };
-            let queryData = JSON.stringify({ context: newContext, payload });
+    async init() {
+        await super.init();
+        if (!this.messageValidator.privateKey) {
             try {
-                this.emit('debug', newContext.correlationUUID, `NATS REQUEST (${topic}): ${queryData}`);
+                this.emit('info', 'no correlation', 'Message Signing NOT Configured');
             }
             catch (err) { }
-            let queryResponse = yield _super.queryTopic.call(this, `${topicPrefix}.${topic}`, queryData, queryTimeout);
-            if (!queryResponse)
-                throw `INVALID RESPONSE (${topic}) from NATS Mesh`;
+        }
+        if (!this.messageValidator.publicKey) {
             try {
-                this.emit('debug', newContext.correlationUUID, `NATS RESPONSE (${topic}): ${queryResponse}`);
+                this.emit('info', 'no correlation', 'Message Validation NOT Configured');
             }
             catch (err) { }
-            let parsedResponse = JSON.parse(queryResponse);
-            if (parsedResponse.response.errors)
-                throw parsedResponse.response.errors;
-            return parsedResponse.response.result;
-        });
+        }
+        this.registerTestHandler();
     }
-    publishEvent(topic, context, payload, topicPrefix = CLIENT_PREFIX) {
+    async query(topic, context, payload, queryTimeout = QUERY_TIMEOUT, topicPrefix = CLIENT_PREFIX) {
+        if (typeof context !== 'object' || typeof payload !== 'object')
+            throw 'INVALID REQUEST: One or more of context or payload are not properly structured objects.';
+        let newContext = {
+            correlationUUID: context.correlationUUID || 'MICROSERVICE',
+            idToken: context.idToken || null,
+            ephemeralToken: context.ephemeralToken || null,
+        };
+        let queryData = JSON.stringify({ context: newContext, payload });
+        try {
+            this.emit('debug', newContext.correlationUUID, `NATS REQUEST (${topic}): ${queryData}`);
+        }
+        catch (err) { }
+        let queryResponse = await super.queryTopic(`${topicPrefix}.${topic}`, queryData, queryTimeout);
+        if (!queryResponse)
+            throw `INVALID RESPONSE (${topic}) from NATS Mesh`;
+        try {
+            this.emit('debug', newContext.correlationUUID, `NATS RESPONSE (${topic}): ${queryResponse}`);
+        }
+        catch (err) { }
+        let parsedResponse = JSON.parse(queryResponse);
+        if (parsedResponse.response.errors)
+            throw parsedResponse.response.errors;
+        return parsedResponse.response.result;
+    }
+    publish(topic, context, payload, topicPrefix = CLIENT_PREFIX) {
         if (typeof context !== 'object' || typeof payload !== 'object')
             throw 'INVALID REQUEST: One or more of context or payload are not properly structured objects.';
         let eventData = JSON.stringify({ context, payload });
@@ -93,9 +67,9 @@ class Microservice extends NATSClient {
         catch (err) { }
         return super.publishTopic(`${topicPrefix}.${topic}`, eventData);
     }
-    registerTopicHandler(topic, fnHandler, minScopeRequired = SUPERADMIN, queue = null, topicPrefix = MESH_PREFIX) {
+    registerHandler(topic, fnHandler, minScopeRequired = SUPERADMIN, queue = null, topicPrefix = MESH_PREFIX) {
         try {
-            let topicHandler = (request, replyTo, topic) => __awaiter(this, void 0, void 0, function* () {
+            let topicHandler = async (request, replyTo, topic) => {
                 let errors = null;
                 let result = null;
                 let topicStart = Date.now();
@@ -105,13 +79,11 @@ class Microservice extends NATSClient {
                     }
                     catch (err) { }
                     let parsedRequest = request ? JSON.parse(request) : null;
-                    if (!parsedRequest.context || !parsedRequest.payload)
+                    if (!parsedRequest?.context || !parsedRequest?.payload)
                         throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
-                    //Verify MESSAGE AUTHORIZATION
                     parsedRequest.context.assertions = this.validateRequest(topic, parsedRequest.context, minScopeRequired);
                     parsedRequest.context.topic = topic.substring(topic.indexOf(".") + 1);
-                    //Request is Valid, Handle the Request
-                    result = yield fnHandler(parsedRequest);
+                    result = await fnHandler(parsedRequest);
                     if (typeof result !== 'object') {
                         result = {
                             status: result
@@ -146,7 +118,7 @@ class Microservice extends NATSClient {
                     }
                     catch (err) { }
                 }
-            });
+            };
             super.registerTopicHandler(`${topicPrefix}.${topic}`, topicHandler, queue);
         }
         catch (err) {
@@ -194,9 +166,8 @@ class Microservice extends NATSClient {
             catch (err) { }
         }
     }
-    //PRIVATE FUNCTIONS
     validateRequest(topic, context, minScopeRequired) {
-        if (!context.ephemeralToken && !topic.endsWith("NOAUTH")) // && !topic.endsWith("INTERNAL"))
+        if (!context.ephemeralToken && !topic.endsWith("NOAUTH"))
             throw 'UNAUTHORIZED: Ephemeral Authorization Token Missing';
         if (!context.ephemeralToken)
             return {};
@@ -232,7 +203,7 @@ class Microservice extends NATSClient {
         if (topic.endsWith("RESTRICTED") && !assertions.authorization.superAdmin)
             throw 'UNAUTHORIZED:  Requires SUPERADMIN Privileges';
         switch (minScopeRequired) {
-            case 'superAdmin':
+            case 'SUPERADMIN':
                 if (!assertions.authorization.superAdmin)
                     throw 'UNAUTHORIZED:  Requires SUPERADMIN Privileges';
                 break;
@@ -259,7 +230,7 @@ class Microservice extends NATSClient {
                     throw 'UNAUTHORIZED:  Requires OWNER Permission Scope or Greater';
                 break;
             default:
-                throw 'SERVER ERROR:  Invalid Scope Requirement';
+                throw `SERVER ERROR:  Invalid Scope Requirement (${minScopeRequired})`;
         }
         let scopeRestriction = null;
         switch (assertions.authorization.scope) {
@@ -283,68 +254,14 @@ class Microservice extends NATSClient {
         });
         return super.publishTopic(replyTopic, response);
     }
-    //***************************************************
-    // TOPOLOGY TEST Functions
-    //***************************************************
-    scanToplogy(request) {
-        const _super = Object.create(null, {
-            queryTopic: { get: () => super.queryTopic }
-        });
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!request.payload.testID)
-                throw 'No Test ID specified';
-            if (!request.payload.nodes)
-                throw 'No Test Nodes specified';
-            let scanResult = {
-                testStart: Date.now(),
-            };
-            let nodeResults = [];
-            let testRequest = JSON.stringify({ context: request.context, payload: { testID: request.payload.testID } });
-            for (let node of request.payload.nodes) {
-                let nodeStart = Date.now();
-                let nodeResult = { node };
-                let queryResponse = yield _super.queryTopic.call(this, `TEST.${node}.ping.validate`, testRequest, 100);
-                nodeResult.duration = Date.now() - nodeStart;
-                if (!queryResponse) {
-                    nodeResult.result = `NO RESPONSE`;
-                }
-                else {
-                    let parsedResponse = JSON.parse(queryResponse);
-                    if (parsedResponse.response.errors) {
-                        let errorString = JSON.stringify(parsedResponse.response.errors);
-                        if (errorString.indexOf('TIMEOUT') >= 0)
-                            nodeResult.result = 'TIMEOUT';
-                        else
-                            nodeResult.result = `${errorString}`;
-                    }
-                    else if (!parsedResponse.response.result) {
-                        nodeResult.result = 'NO RESULT';
-                    }
-                    else {
-                        if (parsedResponse.response.result.testID = request.payload.testID)
-                            nodeResult.result = 'OK';
-                        else
-                            nodeResult.result = 'UNCORRELATED';
-                    }
-                }
-                nodeResults.push(nodeResult);
-            }
-            scanResult.testEnd = Date.now();
-            scanResult.duration = scanResult.testEnd - scanResult.testStart;
-            scanResult.nodeResults = nodeResults;
-            return scanResult;
-        });
-    }
-    versionNode(request) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return { version: this.sourceVersion };
-        });
+    async versionNode() {
+        return { version: this.sourceVersion };
     }
     registerTestHandler() {
         let instanceID = uuid.v4();
         let testTopic = `TEST.${this.serviceName}.${instanceID}`;
         try {
-            let topicHandler = (request, replyTo, topic) => __awaiter(this, void 0, void 0, function* () {
+            let topicHandler = async (request, replyTo, topic) => {
                 let errors = null;
                 let result = null;
                 try {
@@ -355,7 +272,7 @@ class Microservice extends NATSClient {
                     let parsedRequest = request ? JSON.parse(request) : null;
                     if (!parsedRequest)
                         throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
-                    result = yield this.versionNode(parsedRequest);
+                    result = await this.versionNode();
                 }
                 catch (err) {
                     let error = `Test Error(${topic}): ${JSON.stringify(err)}`;
@@ -379,7 +296,7 @@ class Microservice extends NATSClient {
                     }
                     catch (err) { }
                 }
-            });
+            };
             super.registerTopicHandler(testTopic, topicHandler, instanceID);
         }
         catch (err) {
@@ -390,4 +307,3 @@ class Microservice extends NATSClient {
         }
     }
 }
-exports.Microservice = Microservice;
