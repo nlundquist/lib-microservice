@@ -1,8 +1,7 @@
 import { NATSClient, NATSTopicHandler }     from '@randomrod/lib-nats-client';
 import base64url                            from 'base64url';
-
-const jwt                                   = require('jsonwebtoken');
-const uuid                                  = require('uuid');
+import jwt, {JwtPayload}                    from 'jsonwebtoken';
+import uuid                                 from 'uuid';
 
 const CLIENT_PREFIX = 'CLIENT';
 const MESH_PREFIX   = 'MESH';
@@ -17,6 +16,12 @@ export interface ServiceRequest {
 
 export interface ServiceHandler {
     (request: ServiceRequest): Promise<any>;
+}
+
+export interface ScopeRestriction {
+    site_id?:   string,
+    member_id?: string,
+    user_id?:   string
 }
 
 export class Microservice extends NATSClient {
@@ -130,35 +135,38 @@ export class Microservice extends NATSClient {
         }
     }
 
-    generateToken(assertions: any) {
+    generateToken(assertions: any): string | null {
         try {
             if(!this.messageValidator.privateKey || !this.messageValidator.algorithm) throw "MessageValidator Not Configured";
             return jwt.sign(assertions, this.messageValidator.privateKey, {algorithm: this.messageValidator.algorithm});
         } catch(err) {
             try{this.emit('error', 'MICROSERVICE', `Error Generating Ephemeral Token: ${JSON.stringify(err)}`);}catch(err){}
         }
+        return null;
     }
 
-    verifyToken(token: any) {
+    verifyToken(token: any): JwtPayload | string | null {
         try {
             if(!this.messageValidator.publicKey || !this.messageValidator.algorithm) throw "MessageValidator Not Configured";
             return jwt.verify(token, this.messageValidator.publicKey, {algorithms: [this.messageValidator.algorithm]});
         } catch(err) {
             try{this.emit('error', 'MICROSERVICE', `Error Verifying Ephemeral Token: ${JSON.stringify(err)}`);}catch(err){}
         }
+        return null;
     }
 
-    decodeToken(token: any) {
+    decodeToken(token: any): JwtPayload | string | null {
         try {
             let decoded: any = jwt.decode(token, {complete: true});
             return decoded.payload;
         } catch(err) {
             try{this.emit('error', 'MICROSERVICE', `Error Decoding Ephemeral Token: ${JSON.stringify(err)}`);}catch(err){}
         }
+        return null;
     }
 
     //PRIVATE FUNCTIONS
-    private validateRequest(topic: string, context: any, minScopeRequired: string) {
+    private validateRequest(topic: string, context: any, minScopeRequired: string): any {
 
         if(!context.ephemeralToken && !topic.endsWith("NOAUTH"))// && !topic.endsWith("INTERNAL"))
             throw 'UNAUTHORIZED: Ephemeral Authorization Token Missing';
@@ -193,7 +201,7 @@ export class Microservice extends NATSClient {
         return token_assertions;
     }
 
-    private authorizeScope(assertions: any, minScopeRequired: string, topic: string) {
+    private authorizeScope(assertions: any, minScopeRequired: string, topic: string): ScopeRestriction | null {
         if(topic.endsWith("RESTRICTED") && !assertions.authorization.superAdmin)
             throw 'UNAUTHORIZED:  Requires SUPERADMIN Privileges';
 
@@ -227,7 +235,7 @@ export class Microservice extends NATSClient {
                 throw `SERVER ERROR:  Invalid Scope Requirement (${minScopeRequired})`;
         }
 
-        let scopeRestriction: any = null;
+        let scopeRestriction: ScopeRestriction | null = null;
         switch(assertions.authorization.scope) {
             case "SITE":
                 scopeRestriction = { site_id: assertions.authentication.site_id };
@@ -243,7 +251,7 @@ export class Microservice extends NATSClient {
         return scopeRestriction;
     }
 
-    private publishResponse(replyTopic: string, errors: any, result: any) {
+    private publishResponse(replyTopic: string, errors: any, result: any): void {
         let response = JSON.stringify({
             response: {
                 errors: errors,
@@ -256,7 +264,7 @@ export class Microservice extends NATSClient {
     //***************************************************
     // TEST Function
     //***************************************************
-    private async versionNode() {
+    private versionNode() {
         return { version: this.sourceVersion };
     }
 
@@ -275,7 +283,7 @@ export class Microservice extends NATSClient {
                     let parsedRequest: ServiceRequest = request ? JSON.parse(request) : null;
                     if(!parsedRequest) throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
 
-                    result = await this.versionNode();
+                    result = this.versionNode();
 
                 } catch(err) {
                     let error = `Test Error(${topic}): ${JSON.stringify(err)}`;

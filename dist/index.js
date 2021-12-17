@@ -1,7 +1,7 @@
 import { NATSClient } from '@randomrod/lib-nats-client';
 import base64url from 'base64url';
-const jwt = require('jsonwebtoken');
-const uuid = require('uuid');
+import jwt from 'jsonwebtoken';
+import uuid from 'uuid';
 const CLIENT_PREFIX = 'CLIENT';
 const MESH_PREFIX = 'MESH';
 const SUPERADMIN = 'SUPERADMIN';
@@ -140,6 +140,7 @@ export class Microservice extends NATSClient {
             }
             catch (err) { }
         }
+        return null;
     }
     verifyToken(token) {
         try {
@@ -153,6 +154,7 @@ export class Microservice extends NATSClient {
             }
             catch (err) { }
         }
+        return null;
     }
     decodeToken(token) {
         try {
@@ -165,6 +167,7 @@ export class Microservice extends NATSClient {
             }
             catch (err) { }
         }
+        return null;
     }
     validateRequest(topic, context, minScopeRequired) {
         if (!context.ephemeralToken && !topic.endsWith("NOAUTH"))
@@ -254,7 +257,7 @@ export class Microservice extends NATSClient {
         });
         return super.publishTopic(replyTopic, response);
     }
-    async versionNode() {
+    versionNode() {
         return { version: this.sourceVersion };
     }
     registerTestHandler() {
@@ -272,7 +275,7 @@ export class Microservice extends NATSClient {
                     let parsedRequest = request ? JSON.parse(request) : null;
                     if (!parsedRequest)
                         throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
-                    result = await this.versionNode();
+                    result = this.versionNode();
                 }
                 catch (err) {
                     let error = `Test Error(${topic}): ${JSON.stringify(err)}`;
