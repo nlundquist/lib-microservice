@@ -168,7 +168,7 @@ export class Microservice extends NATSClient {
     //PRIVATE FUNCTIONS
     private validateRequest(topic: string, context: any, minScopeRequired: string): any {
 
-        if(!context.ephemeralToken && !topic.endsWith("NOAUTH"))// && !topic.endsWith("INTERNAL"))
+        if(!context.ephemeralToken && !topic.endsWith('NOAUTH') && minScopeRequired !== 'NOAUTH')
             throw 'UNAUTHORIZED: Ephemeral Authorization Token Missing';
 
         if(!context.ephemeralToken) return {};
@@ -229,6 +229,10 @@ export class Microservice extends NATSClient {
                     assertions.authorization.scope !== 'SITE' &&
                     assertions.authorization.scope !== 'MEMBER' &&
                     assertions.authorization.scope !== 'OWNER')  throw 'UNAUTHORIZED:  Requires OWNER Permission Scope or Greater';
+                break;
+
+            case 'NOAUTH':
+                return null; //Shortcut - no restrictions, no authorization check
                 break;
 
             default:

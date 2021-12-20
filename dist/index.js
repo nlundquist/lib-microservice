@@ -170,7 +170,7 @@ export class Microservice extends NATSClient {
         return null;
     }
     validateRequest(topic, context, minScopeRequired) {
-        if (!context.ephemeralToken && !topic.endsWith("NOAUTH"))
+        if (!context.ephemeralToken && !topic.endsWith('NOAUTH') && minScopeRequired !== 'NOAUTH')
             throw 'UNAUTHORIZED: Ephemeral Authorization Token Missing';
         if (!context.ephemeralToken)
             return {};
@@ -231,6 +231,9 @@ export class Microservice extends NATSClient {
                     assertions.authorization.scope !== 'MEMBER' &&
                     assertions.authorization.scope !== 'OWNER')
                     throw 'UNAUTHORIZED:  Requires OWNER Permission Scope or Greater';
+                break;
+            case 'NOAUTH':
+                return null;
                 break;
             default:
                 throw `SERVER ERROR:  Invalid Scope Requirement (${minScopeRequired})`;
