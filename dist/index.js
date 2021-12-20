@@ -1,7 +1,7 @@
 import { NATSClient } from '@randomrod/lib-nats-client';
 import base64url from 'base64url';
 import jwt from 'jsonwebtoken';
-import uuid from 'uuid';
+import { v4 as uuidv4 } from 'uuid';
 const CLIENT_PREFIX = 'CLIENT';
 const MESH_PREFIX = 'MESH';
 const SUPERADMIN = 'SUPERADMIN';
@@ -261,7 +261,7 @@ export class Microservice extends NATSClient {
         return { version: this.sourceVersion };
     }
     registerTestHandler() {
-        let instanceID = uuid.v4();
+        let instanceID = uuidv4();
         let testTopic = `TEST.${this.serviceName}.${instanceID}`;
         try {
             let topicHandler = async (request, replyTo, topic) => {
