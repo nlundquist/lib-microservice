@@ -23,6 +23,7 @@ export declare class Microservice extends NATSClient {
     generateToken(assertions: any): string | null;
     verifyToken(token: any): JwtPayload | string | null;
     decodeToken(token: any): JwtPayload | string | null;
+    verifyParameters(test: any, fields: string[]): void;
     private validateRequest;
     private authorizeScope;
     private publishResponse;

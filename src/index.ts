@@ -165,6 +165,24 @@ export class Microservice extends NATSClient {
         return null;
     }
 
+    verifyParameters(test: any, fields: string[]): void {
+        if(!test) throw 'VALIDATION: Missing Verification Test Object';
+
+        for(let field of fields) {
+            let fieldEntries = field.split(",");
+            if(fieldEntries.length > 1) {
+                let anyFound = false;
+                for(let fieldEntry of fieldEntries) {
+                    if(test.hasOwnProperty(fieldEntry) && test[field] !== null) anyFound = true;
+                }
+                if(!anyFound)  throw `VALIDATION: Missing At Least One Parameter Of - ${field}`;
+            } else {
+                if(!test.hasOwnProperty(field) || test[field] === null )
+                    throw `VALIDATION: Missing Parameter - ${field}`;
+            }
+        }
+    }
+
     //PRIVATE FUNCTIONS
     private validateRequest(topic: string, context: any, minScopeRequired: string): any {
 
