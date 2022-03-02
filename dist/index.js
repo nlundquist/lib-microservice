@@ -45,11 +45,17 @@ export class Microservice extends NATSClient {
             this.emit('debug', newContext.correlationUUID, `NATS REQUEST (${topic}): ${queryData}`);
         }
         catch (err) { }
+        let topicStart = Date.now();
         let queryResponse = await super.queryTopic(`${topicPrefix}.${topic}`, queryData, queryTimeout);
         if (!queryResponse)
             throw `INVALID RESPONSE (${topic}) from NATS Mesh`;
+        let topicDuration = Date.now() - topicStart;
         try {
-            this.emit('debug', newContext.correlationUUID, `NATS RESPONSE (${topic}): ${queryResponse}`);
+            this.emit('info', newContext.correlationUUID, `NATS RESPONSE (${topic}) | ${topicDuration} ms`);
+        }
+        catch (err) { }
+        try {
+            this.emit('debug', newContext.correlationUUID, `NATS RESPONSE (${topic}) | ${topicDuration} ms : ${queryResponse}`);
         }
         catch (err) { }
         let parsedResponse = JSON.parse(queryResponse);
@@ -108,11 +114,19 @@ export class Microservice extends NATSClient {
                 if (replyTo) {
                     this.publishResponse(replyTo, errors, result);
                     try {
+                        this.emit('info', 'SERVICE', `Microservice | topicHandler (${topic}) | ${topicDuration} ms`);
+                    }
+                    catch (err) { }
+                    try {
                         this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + topicDuration.toString() + 'ms | ' + JSON.stringify(errors ? errors : result));
                     }
                     catch (err) { }
                 }
                 else {
+                    try {
+                        this.emit('info', 'SERVICE', `Microservice | topicHandler (${topic}) | ${topicDuration} ms`);
+                    }
+                    catch (err) { }
                     try {
                         this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + topicDuration.toString() + 'ms | No Response Requested');
                     }
