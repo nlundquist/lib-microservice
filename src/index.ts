@@ -215,7 +215,7 @@ export class Microservice extends NATSClient {
             token_assertions.authentication = ephemeralAuth.authentication;
             token_assertions.authorization = ephemeralAuth.authorization;
             token_assertions.authorization.scopeRestriction = this.authorizeScope(token_assertions, minScopeRequired, topic);
-            token_assertions.authorization.scope = (topic: string) => {
+            token_assertions.authorization.scopePermission = (topic: string) => {
                 if(token_assertions.authorization.superAdmin) return '*';
                 return token_assertions.authorization.permissions[topic] || 'NONE';
             };
