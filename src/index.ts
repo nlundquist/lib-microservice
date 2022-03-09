@@ -1,4 +1,5 @@
 import { NATSClient, NATSTopicHandler }     from '@randomrod/lib-nats-client';
+import AWS                                  from 'aws-sdk';
 import base64url                            from 'base64url';
 import jwt, {JwtPayload}                    from 'jsonwebtoken';
 import { v4 as uuidv4 }                     from 'uuid';
@@ -8,6 +9,17 @@ const MESH_PREFIX   = 'MESH';
 
 const SUPERADMIN    = 'SUPERADMIN';
 const QUERY_TIMEOUT = 7500;
+
+interface PUBLIC_KEY {
+    keyID: string,
+    key: any
+};
+
+interface JWT_TOKEN {
+    header?: string,
+    payload?: string,
+    signature?: string
+}
 
 export interface ServiceRequest {
     context: any,
@@ -28,10 +40,16 @@ export class Microservice extends NATSClient {
     sourceVersion: string = process.env.SOURCE_VERSION || 'LOCAL';
 
     messageValidator: any = {
-        privateKey: process.env.JWT_PRIVATE_KEY || null,
-        publicKey:  process.env.JWT_PUBLIC_KEY  || null,
-        algorithm:  process.env.JWT_ALGORITHM   || null
+        privateKey:         process.env.JWT_PRIVATE_KEY || null,
+        publicKey:          process.env.JWT_PUBLIC_KEY  || null,
+        jwtAlgorithm:       process.env.JWT_ALGORITHM   || 'ES256',
+
+        kmsAlgorithm:       process.env.KMS_ALGORITHM   || 'ECDSA_SHA_256',
+        kmsSigningKeyID:    process.env.KMS_KEY_ARN     || null
     };
+
+    publicKeys: PUBLIC_KEY[] = [];
+    kms: any = null;
 
     constructor(serviceName: string) {
         super(serviceName);
@@ -39,12 +57,15 @@ export class Microservice extends NATSClient {
 
     async init(): Promise<void> {
         await super.init();
-        if(!this.messageValidator.privateKey) {
+        if(!this.messageValidator.privateKey && !this.messageValidator.kmsSigningKeyID)
             try{this.emit('info', 'no correlation', 'Message Signing NOT Configured');}catch(err){}
-        }
-        if(!this.messageValidator.publicKey) {
+
+        if(!this.messageValidator.publicKey && !this.messageValidator.kmsSigningKeyID)
             try{this.emit('info', 'no correlation', 'Message Validation NOT Configured');}catch(err){}
-        }
+
+        if(this.messageValidator.kmsSigningKeyID)
+            this.kms = new AWS.KMS({apiVersion: '2014-11-01'});
+
         this.registerTestHandler();
     }
 
@@ -142,20 +163,42 @@ export class Microservice extends NATSClient {
         }
     }
 
-    generateToken(assertions: any): string | null {
+    async generateToken(assertions: any): Promise<string | null> {
         try {
-            if(!this.messageValidator.privateKey || !this.messageValidator.algorithm) throw "MessageValidator Not Configured";
-            return jwt.sign(assertions, this.messageValidator.privateKey, {algorithm: this.messageValidator.algorithm});
+            if((!this.messageValidator.privateKey && !this.messageValidator.kmsSigningKeyID) ||
+                (this.messageValidator.kmsSigningKeyID && !this.messageValidator.kmsAlgorithm) ||
+                !this.messageValidator.jwtAlgorithm) throw "MessageValidator Not Configured";
+
+            if(this.messageValidator.privateKey)
+                return jwt.sign(assertions, this.messageValidator.privateKey, {algorithm: this.messageValidator.jwtAlgorithm});
+
+            if(this.messageValidator.kmsSigningKeyID)
+                return this.kmsSign(assertions, this.messageValidator.kmsSigningKeyID, this.messageValidator.jwtAlgorithm, this.messageValidator.kmsAlgorithm);
+
         } catch(err) {
             try{this.emit('error', 'MICROSERVICE', `Error Generating Ephemeral Token: ${JSON.stringify(err)}`);}catch(err){}
         }
         return null;
     }
 
-    verifyToken(token: any): JwtPayload | string | null {
+    async verifyToken(token: any): Promise<JwtPayload | string | null> {
         try {
-            if(!this.messageValidator.publicKey || !this.messageValidator.algorithm) throw "MessageValidator Not Configured";
-            return jwt.verify(token, this.messageValidator.publicKey, {algorithms: [this.messageValidator.algorithm]});
+            if((!this.messageValidator.publicKey && !this.messageValidator.kmsSigningKeyID) ||
+                (this.messageValidator.kmsSigningKeyID && !this.messageValidator.kmsAlgorithm) ||
+                !this.messageValidator.jwtAlgorithm) throw "MessageValidator Not Configured";
+
+            let publicKey: any = this.messageValidator.publicKey;
+            let algorithm: any = this.messageValidator.jwtAlgorithm;
+
+            if(this.messageValidator.kmsSigningKeyID) {  //This signifies KMS is in use, and we need get the public key...
+                let tokenClaims: any = this.decodeToken(token);
+                publicKey = await this.kmsPublicKey(tokenClaims.keyID);
+                algorithm = tokenClaims.jwtAlgorithm;
+            }
+
+            if(publicKey && algorithm)
+                return jwt.verify(token, publicKey, {algorithms: [algorithm]});
+
         } catch(err) {
             try{this.emit('error', 'MICROSERVICE', `Error Verifying Ephemeral Token: ${JSON.stringify(err)}`);}catch(err){}
         }
@@ -170,6 +213,46 @@ export class Microservice extends NATSClient {
             try{this.emit('error', 'MICROSERVICE', `Error Decoding Ephemeral Token: ${JSON.stringify(err)}`);}catch(err){}
         }
         return null;
+    }
+
+    async kmsSign(assertions: any, keyID: string, jwtAlgorithm: string, kmsAlgorithm: string) {
+        
+        assertions.keyID = keyID;
+        assertions.jwtAlgorithm = jwtAlgorithm;
+        assertions.kmsAlgorithm = kmsAlgorithm;
+
+        let token_components: JWT_TOKEN = {
+            header: base64url(`{ "alg": "${jwtAlgorithm}", "typ": "JWT"}`),
+            payload: base64url(JSON.stringify(assertions))
+        };
+
+        let message = Buffer.from(token_components.header + "." + token_components.payload)
+
+        let res = await this.kms.sign({
+            Message: message,
+            KeyId: keyID,
+            SigningAlgorithm: kmsAlgorithm,
+            MessageType: 'RAW'
+        }).promise();
+
+        token_components.signature = res.Signature.toString("base64")
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=/g, '');
+
+        return token_components.header + "." + token_components.payload + "." + token_components.signature;
+    }
+
+    async kmsPublicKey(keyID: string) {
+        //Check local cache first...
+        for(let publicKey of this.publicKeys) {
+            if(publicKey.keyID === keyID) return publicKey.key;
+        }
+
+        //Lookup the Public Key, Cache it, and Return it
+        let publicKMSKey = await this.kms.getPublicKey({KeyId: keyID}).promise();
+        this.publicKeys.push({keyID: keyID, key: publicKMSKey});
+        return publicKMSKey;
     }
 
     verifyParameters(test: any, fields: string[]): void {
@@ -200,7 +283,7 @@ export class Microservice extends NATSClient {
 
         let token_assertions: any = null;
         try {
-            token_assertions = (this.messageValidator.publicKey && this.messageValidator.algorithm)
+            token_assertions = (this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm)
                 ? this.verifyToken(context.ephemeralToken)
                 : this.decodeToken(context.ephemeralToken);
 

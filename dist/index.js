@@ -1,4 +1,5 @@
 import { NATSClient } from '@randomrod/lib-nats-client';
+import AWS from 'aws-sdk';
 import base64url from 'base64url';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
@@ -6,6 +7,7 @@ const CLIENT_PREFIX = 'CLIENT';
 const MESH_PREFIX = 'MESH';
 const SUPERADMIN = 'SUPERADMIN';
 const QUERY_TIMEOUT = 7500;
+;
 export class Microservice extends NATSClient {
     constructor(serviceName) {
         super(serviceName);
@@ -13,23 +15,27 @@ export class Microservice extends NATSClient {
         this.messageValidator = {
             privateKey: process.env.JWT_PRIVATE_KEY || null,
             publicKey: process.env.JWT_PUBLIC_KEY || null,
-            algorithm: process.env.JWT_ALGORITHM || null
+            jwtAlgorithm: process.env.JWT_ALGORITHM || 'ES256',
+            kmsAlgorithm: process.env.KMS_ALGORITHM || 'ECDSA_SHA_256',
+            kmsSigningKeyID: process.env.KMS_KEY_ARN || null
         };
+        this.publicKeys = [];
+        this.kms = null;
     }
     async init() {
         await super.init();
-        if (!this.messageValidator.privateKey) {
+        if (!this.messageValidator.privateKey && !this.messageValidator.kmsSigningKeyID)
             try {
                 this.emit('info', 'no correlation', 'Message Signing NOT Configured');
             }
             catch (err) { }
-        }
-        if (!this.messageValidator.publicKey) {
+        if (!this.messageValidator.publicKey && !this.messageValidator.kmsSigningKeyID)
             try {
                 this.emit('info', 'no correlation', 'Message Validation NOT Configured');
             }
             catch (err) { }
-        }
+        if (this.messageValidator.kmsSigningKeyID)
+            this.kms = new AWS.KMS({ apiVersion: '2014-11-01' });
         this.registerTestHandler();
     }
     async query(topic, context, payload, queryTimeout = QUERY_TIMEOUT, topicPrefix = CLIENT_PREFIX) {
@@ -142,11 +148,16 @@ export class Microservice extends NATSClient {
             catch (err) { }
         }
     }
-    generateToken(assertions) {
+    async generateToken(assertions) {
         try {
-            if (!this.messageValidator.privateKey || !this.messageValidator.algorithm)
+            if ((!this.messageValidator.privateKey && !this.messageValidator.kmsSigningKeyID) ||
+                (this.messageValidator.kmsSigningKeyID && !this.messageValidator.kmsAlgorithm) ||
+                !this.messageValidator.jwtAlgorithm)
                 throw "MessageValidator Not Configured";
-            return jwt.sign(assertions, this.messageValidator.privateKey, { algorithm: this.messageValidator.algorithm });
+            if (this.messageValidator.privateKey)
+                return jwt.sign(assertions, this.messageValidator.privateKey, { algorithm: this.messageValidator.jwtAlgorithm });
+            if (this.messageValidator.kmsSigningKeyID)
+                return this.kmsSign(assertions, this.messageValidator.kmsSigningKeyID, this.messageValidator.jwtAlgorithm, this.messageValidator.kmsAlgorithm);
         }
         catch (err) {
             try {
@@ -156,11 +167,21 @@ export class Microservice extends NATSClient {
         }
         return null;
     }
-    verifyToken(token) {
+    async verifyToken(token) {
         try {
-            if (!this.messageValidator.publicKey || !this.messageValidator.algorithm)
+            if ((!this.messageValidator.publicKey && !this.messageValidator.kmsSigningKeyID) ||
+                (this.messageValidator.kmsSigningKeyID && !this.messageValidator.kmsAlgorithm) ||
+                !this.messageValidator.jwtAlgorithm)
                 throw "MessageValidator Not Configured";
-            return jwt.verify(token, this.messageValidator.publicKey, { algorithms: [this.messageValidator.algorithm] });
+            let publicKey = this.messageValidator.publicKey;
+            let algorithm = this.messageValidator.jwtAlgorithm;
+            if (this.messageValidator.kmsSigningKeyID) {
+                let tokenClaims = this.decodeToken(token);
+                publicKey = await this.kmsPublicKey(tokenClaims.keyID);
+                algorithm = tokenClaims.jwtAlgorithm;
+            }
+            if (publicKey && algorithm)
+                return jwt.verify(token, publicKey, { algorithms: [algorithm] });
         }
         catch (err) {
             try {
@@ -182,6 +203,36 @@ export class Microservice extends NATSClient {
             catch (err) { }
         }
         return null;
+    }
+    async kmsSign(assertions, keyID, jwtAlgorithm, kmsAlgorithm) {
+        assertions.keyID = keyID;
+        assertions.jwtAlgorithm = jwtAlgorithm;
+        assertions.kmsAlgorithm = kmsAlgorithm;
+        let token_components = {
+            header: base64url(`{ "alg": "${jwtAlgorithm}", "typ": "JWT"}`),
+            payload: base64url(JSON.stringify(assertions))
+        };
+        let message = Buffer.from(token_components.header + "." + token_components.payload);
+        let res = await this.kms.sign({
+            Message: message,
+            KeyId: keyID,
+            SigningAlgorithm: kmsAlgorithm,
+            MessageType: 'RAW'
+        }).promise();
+        token_components.signature = res.Signature.toString("base64")
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=/g, '');
+        return token_components.header + "." + token_components.payload + "." + token_components.signature;
+    }
+    async kmsPublicKey(keyID) {
+        for (let publicKey of this.publicKeys) {
+            if (publicKey.keyID === keyID)
+                return publicKey.key;
+        }
+        let publicKMSKey = await this.kms.getPublicKey({ KeyId: keyID }).promise();
+        this.publicKeys.push({ keyID: keyID, key: publicKMSKey });
+        return publicKMSKey;
     }
     verifyParameters(test, fields) {
         if (!test)
@@ -210,7 +261,7 @@ export class Microservice extends NATSClient {
             return {};
         let token_assertions = null;
         try {
-            token_assertions = (this.messageValidator.publicKey && this.messageValidator.algorithm)
+            token_assertions = (this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm)
                 ? this.verifyToken(context.ephemeralToken)
                 : this.decodeToken(context.ephemeralToken);
             if (!token_assertions)
