@@ -174,7 +174,7 @@ export class Microservice extends NATSClient {
                 return jwt.sign(assertions, this.messageValidator.privateKey, {algorithm: this.messageValidator.jwtAlgorithm});
 
             if(this.messageValidator.kmsSigningKeyID)
-                return this.kmsSign(assertions, this.messageValidator.kmsSigningKeyID, this.messageValidator.jwtAlgorithm, this.messageValidator.kmsAlgorithm);
+                return await this.kmsSign(assertions, this.messageValidator.kmsSigningKeyID, this.messageValidator.jwtAlgorithm, this.messageValidator.kmsAlgorithm);
 
         } catch(err) {
             try{this.emit('error', 'MICROSERVICE', `Error Generating Ephemeral Token: ${JSON.stringify(err)}`);}catch(err){}

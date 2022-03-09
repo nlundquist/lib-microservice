@@ -158,7 +158,7 @@ export class Microservice extends NATSClient {
             if (this.messageValidator.privateKey)
                 return jwt.sign(assertions, this.messageValidator.privateKey, { algorithm: this.messageValidator.jwtAlgorithm });
             if (this.messageValidator.kmsSigningKeyID)
-                return this.kmsSign(assertions, this.messageValidator.kmsSigningKeyID, this.messageValidator.jwtAlgorithm, this.messageValidator.kmsAlgorithm);
+                return await this.kmsSign(assertions, this.messageValidator.kmsSigningKeyID, this.messageValidator.jwtAlgorithm, this.messageValidator.kmsAlgorithm);
         }
         catch (err) {
             try {
