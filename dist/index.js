@@ -94,7 +94,7 @@ export class Microservice extends NATSClient {
                     let parsedRequest = request ? JSON.parse(request) : null;
                     if (!parsedRequest?.context || !parsedRequest?.payload)
                         throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
-                    parsedRequest.context.assertions = this.validateRequest(topic, parsedRequest.context, minScopeRequired);
+                    parsedRequest.context.assertions = await this.validateRequest(topic, parsedRequest.context, minScopeRequired);
                     parsedRequest.context.topic = topic.substring(topic.indexOf(".") + 1);
                     result = await fnHandler(parsedRequest);
                     if (typeof result !== 'object') {
@@ -255,15 +255,16 @@ export class Microservice extends NATSClient {
             }
         }
     }
-    validateRequest(topic, context, minScopeRequired) {
+    async validateRequest(topic, context, minScopeRequired) {
         if (!context.ephemeralToken && !topic.endsWith('NOAUTH') && minScopeRequired !== 'NOAUTH')
             throw 'UNAUTHORIZED: Ephemeral Authorization Token Missing';
         if (!context.ephemeralToken)
             return {};
         let token_assertions = null;
         try {
-            token_assertions = (this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm)
-                ? this.verifyToken(context.ephemeralToken)
+            token_assertions = ((this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm) ||
+                (this.messageValidator.kmsSigningKeyID && this.messageValidator.jwtAlgorithm))
+                ? await this.verifyToken(context.ephemeralToken)
                 : this.decodeToken(context.ephemeralToken);
             if (!token_assertions)
                 throw "Error Decoding Ephemeral Authorization Token";
