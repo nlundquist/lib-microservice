@@ -43,6 +43,7 @@ export class Microservice extends NATSClient {
             throw 'INVALID REQUEST: One or more of context or payload are not properly structured objects.';
         let newContext = {
             correlationUUID: context.correlationUUID || 'MICROSERVICE',
+            siteID: context.siteID || null,
             idToken: context.idToken || null,
             ephemeralToken: context.ephemeralToken || null,
         };

@@ -76,6 +76,7 @@ export class Microservice extends NATSClient {
         //Reset the Context to remove previously decoded information (keep it clean!)
         let newContext: any = {
             correlationUUID:    context.correlationUUID     || 'MICROSERVICE',
+            siteID:             context.siteID              || null,
             idToken:            context.idToken             || null,
             ephemeralToken:     context.ephemeralToken      || null,
         };
