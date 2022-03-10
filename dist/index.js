@@ -3,7 +3,7 @@ import AWS from 'aws-sdk';
 import base64url from 'base64url';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
-const CLIENT_PREFIX = 'CLIENT';
+const INTERNAL_PREFIX = 'INTERNAL';
 const MESH_PREFIX = 'MESH';
 const SUPERADMIN = 'SUPERADMIN';
 const QUERY_TIMEOUT = 7500;
@@ -38,11 +38,11 @@ export class Microservice extends NATSClient {
             this.kms = new AWS.KMS({ apiVersion: '2014-11-01' });
         this.registerTestHandler();
     }
-    async query(topic, context, payload, queryTimeout = QUERY_TIMEOUT, topicPrefix = CLIENT_PREFIX) {
+    async query(topic, context, payload, queryTimeout = QUERY_TIMEOUT, topicPrefix = INTERNAL_PREFIX) {
         if (typeof context !== 'object' || typeof payload !== 'object')
             throw 'INVALID REQUEST: One or more of context or payload are not properly structured objects.';
         let newContext = {
-            correlationUUID: context.correlationUUID || 'MICROSERVICE',
+            correlationUUID: context.correlationUUID || uuidv4(),
             siteID: context.siteID || null,
             idToken: context.idToken || null,
             ephemeralToken: context.ephemeralToken || null,
@@ -70,7 +70,7 @@ export class Microservice extends NATSClient {
             throw parsedResponse.response.errors;
         return parsedResponse.response.result;
     }
-    publish(topic, context, payload, topicPrefix = CLIENT_PREFIX) {
+    publish(topic, context, payload, topicPrefix = INTERNAL_PREFIX) {
         if (typeof context !== 'object' || typeof payload !== 'object')
             throw 'INVALID REQUEST: One or more of context or payload are not properly structured objects.';
         let eventData = JSON.stringify({ context, payload });
@@ -94,7 +94,7 @@ export class Microservice extends NATSClient {
                     let parsedRequest = request ? JSON.parse(request) : null;
                     if (!parsedRequest?.context || !parsedRequest?.payload)
                         throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
-                    parsedRequest.context.assertions = await this.validateRequest(topic, parsedRequest.context, minScopeRequired);
+                    parsedRequest.context.assertions = await this.validateRequestAssertions(topic, parsedRequest.context, minScopeRequired);
                     parsedRequest.context.topic = topic.substring(topic.indexOf(".") + 1);
                     result = await fnHandler(parsedRequest);
                     if (typeof result !== 'object') {
@@ -255,11 +255,11 @@ export class Microservice extends NATSClient {
             }
         }
     }
-    async validateRequest(topic, context, minScopeRequired) {
-        if (!context.ephemeralToken && !topic.endsWith('NOAUTH') && minScopeRequired !== 'NOAUTH')
+    async validateRequestAssertions(topic, context, minScopeRequired) {
+        if (!context.ephemeralToken && minScopeRequired !== 'NOAUTH')
             throw 'UNAUTHORIZED: Ephemeral Authorization Token Missing';
         if (!context.ephemeralToken)
-            return {};
+            return null;
         let token_assertions = null;
         try {
             token_assertions = ((this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm) ||
@@ -277,46 +277,47 @@ export class Microservice extends NATSClient {
                 throw "Invalid Ephemeral Authorization Token Payload";
             token_assertions.authentication = ephemeralAuth.authentication;
             token_assertions.authorization = ephemeralAuth.authorization;
-            token_assertions.authorization.scopeRestriction = this.authorizeScope(token_assertions, minScopeRequired, topic);
-            token_assertions.authorization.scopePermission = (topic) => {
+            token_assertions.authorization.scope = (topic) => {
                 if (token_assertions.authorization.superAdmin)
                     return '*';
                 return token_assertions.authorization.permissions[topic] || 'NONE';
             };
+            let assertedScope = token_assertions.authorization.scope(topic);
+            if (token_assertions.authorization.superAdmin)
+                token_assertions.authorization.scopeRestriction = null;
+            else
+                token_assertions.authorization.scopeRestriction = this.authorizeScope(assertedScope, token_assertions, minScopeRequired);
         }
         catch (err) {
-            throw `UNAUTHORIZED: validateRequest Error: ${JSON.stringify(err)}`;
+            throw `UNAUTHORIZED: validateRequestAssertions Error: ${JSON.stringify(err)}`;
         }
         return token_assertions;
     }
-    authorizeScope(assertions, minScopeRequired, topic) {
-        if (topic.endsWith("RESTRICTED") && !assertions.authorization.superAdmin)
-            throw 'UNAUTHORIZED:  Requires SUPERADMIN Privileges';
+    authorizeScope(assertedScope, assertions, minScopeRequired) {
         switch (minScopeRequired) {
             case 'SUPERADMIN':
-                if (!assertions.authorization.superAdmin)
-                    throw 'UNAUTHORIZED:  Requires SUPERADMIN Privileges';
+                throw 'UNAUTHORIZED:  Requires SUPERADMIN Privileges';
                 break;
             case '*':
-                if (assertions.authorization.scope !== '*')
+                if (assertedScope !== '*')
                     throw 'UNAUTHORIZED:  Requires GLOBAL Permission Scope';
                 break;
             case 'SITE':
-                if (assertions.authorization.scope !== '*' &&
-                    assertions.authorization.scope !== 'SITE')
+                if (assertedScope !== '*' &&
+                    assertedScope !== 'SITE')
                     throw 'UNAUTHORIZED:  Requires SITE Permission Scope or Greater';
                 break;
             case 'MEMBER':
-                if (assertions.authorization.scope !== '*' &&
-                    assertions.authorization.scope !== 'SITE' &&
-                    assertions.authorization.scope !== 'MEMBER')
+                if (assertedScope !== '*' &&
+                    assertedScope !== 'SITE' &&
+                    assertedScope !== 'MEMBER')
                     throw 'UNAUTHORIZED:  Requires MEMBER Permission Scope or Greater';
                 break;
             case 'OWNER':
-                if (assertions.authorization.scope !== '*' &&
-                    assertions.authorization.scope !== 'SITE' &&
-                    assertions.authorization.scope !== 'MEMBER' &&
-                    assertions.authorization.scope !== 'OWNER')
+                if (assertedScope !== '*' &&
+                    assertedScope !== 'SITE' &&
+                    assertedScope !== 'MEMBER' &&
+                    assertedScope !== 'OWNER')
                     throw 'UNAUTHORIZED:  Requires OWNER Permission Scope or Greater';
                 break;
             case 'NOAUTH':
@@ -326,7 +327,7 @@ export class Microservice extends NATSClient {
                 throw `SERVER ERROR:  Invalid Scope Requirement (${minScopeRequired})`;
         }
         let scopeRestriction = null;
-        switch (assertions.authorization.scope) {
+        switch (assertedScope) {
             case "SITE":
                 scopeRestriction = { site_id: assertions.authentication.site_id };
                 break;

@@ -32,7 +32,7 @@ export declare class Microservice extends NATSClient {
     kmsSign(assertions: any, keyID: string, jwtAlgorithm: string, kmsAlgorithm: string): Promise<string>;
     kmsPublicKey(keyID: string): Promise<any>;
     verifyParameters(test: any, fields: string[]): void;
-    private validateRequest;
+    private validateRequestAssertions;
     private authorizeScope;
     private publishResponse;
     private versionNode;
