@@ -19,6 +19,7 @@ export interface ScopeRestriction {
 export declare class Microservice extends NATSClient {
     sourceVersion: string;
     messageValidator: any;
+    serviceMessages: string[];
     publicKeys: PUBLIC_KEY[];
     kms: any;
     constructor(serviceName: string);

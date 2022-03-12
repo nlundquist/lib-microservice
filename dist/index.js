@@ -19,6 +19,7 @@ export class Microservice extends NATSClient {
             kmsAlgorithm: process.env.KMS_ALGORITHM || 'ECDSA_SHA_256',
             kmsSigningKeyID: process.env.KMS_KEY_ARN || null
         };
+        this.serviceMessages = [];
         this.publicKeys = [];
         this.kms = null;
     }
@@ -82,6 +83,7 @@ export class Microservice extends NATSClient {
     }
     registerHandler(topic, fnHandler, minScopeRequired = SUPERADMIN, queue = null, topicPrefix = MESH_PREFIX) {
         try {
+            this.serviceMessages.push(topic);
             let topicHandler = async (request, replyTo, topic) => {
                 let errors = null;
                 let result = null;
@@ -262,10 +264,17 @@ export class Microservice extends NATSClient {
             return null;
         let token_assertions = null;
         try {
-            token_assertions = ((this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm) ||
-                (this.messageValidator.kmsSigningKeyID && this.messageValidator.jwtAlgorithm))
-                ? await this.verifyToken(context.ephemeralToken)
-                : this.decodeToken(context.ephemeralToken);
+            if ((this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm) ||
+                (this.messageValidator.kmsSigningKeyID && this.messageValidator.jwtAlgorithm)) {
+                token_assertions = await this.verifyToken(context.ephemeralToken);
+                if (token_assertions)
+                    token_assertions.signatureVerified = true;
+            }
+            else {
+                token_assertions = this.decodeToken(context.ephemeralToken);
+                if (token_assertions)
+                    token_assertions.signatureVerified = false;
+            }
             if (!token_assertions)
                 throw "Error Decoding Ephemeral Authorization Token";
             if (token_assertions.exp < Date.now())
@@ -278,15 +287,14 @@ export class Microservice extends NATSClient {
             token_assertions.authentication = ephemeralAuth.authentication;
             token_assertions.authorization = ephemeralAuth.authorization;
             token_assertions.authorization.scope = (topic) => {
+                if (topic.endsWith('INTERNAL'))
+                    return '*';
                 if (token_assertions.authorization.superAdmin)
                     return '*';
                 return token_assertions.authorization.permissions[topic] || 'NONE';
             };
             let assertedScope = token_assertions.authorization.scope(topic);
-            if (token_assertions.authorization.superAdmin)
-                token_assertions.authorization.scopeRestriction = null;
-            else
-                token_assertions.authorization.scopeRestriction = this.authorizeScope(assertedScope, token_assertions, minScopeRequired);
+            token_assertions.authorization.scopeRestriction = this.authorizeScope(assertedScope, token_assertions, minScopeRequired);
         }
         catch (err) {
             throw `UNAUTHORIZED: validateRequestAssertions Error: ${JSON.stringify(err)}`;
@@ -294,10 +302,9 @@ export class Microservice extends NATSClient {
         return token_assertions;
     }
     authorizeScope(assertedScope, assertions, minScopeRequired) {
+        if (assertions.authorization.superAdmin)
+            return null;
         switch (minScopeRequired) {
-            case 'SUPERADMIN':
-                throw 'UNAUTHORIZED:  Requires SUPERADMIN Privileges';
-                break;
             case '*':
                 if (assertedScope !== '*')
                     throw 'UNAUTHORIZED:  Requires GLOBAL Permission Scope';
@@ -326,16 +333,16 @@ export class Microservice extends NATSClient {
             default:
                 throw `SERVER ERROR:  Invalid Scope Requirement (${minScopeRequired})`;
         }
-        let scopeRestriction = null;
+        let scopeRestriction = { user_id: assertions.authentication.user_id };
         switch (assertedScope) {
-            case "SITE":
-                scopeRestriction = { site_id: assertions.authentication.site_id };
-                break;
             case "MEMBER":
                 scopeRestriction = { member_id: assertions.authentication.member_id };
                 break;
-            case "OWNER":
-                scopeRestriction = { user_id: assertions.authentication.user_id };
+            case "SITE":
+                scopeRestriction = { site_id: assertions.authentication.site_id };
+                break;
+            case "*":
+                scopeRestriction = null;
         }
         return scopeRestriction;
     }
@@ -349,7 +356,7 @@ export class Microservice extends NATSClient {
         return super.publishTopic(replyTopic, response);
     }
     versionNode() {
-        return { version: this.sourceVersion };
+        return { version: this.sourceVersion, messages: this.serviceMessages };
     }
     registerTestHandler() {
         let instanceID = uuidv4();

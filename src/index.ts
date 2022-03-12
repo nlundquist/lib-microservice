@@ -5,7 +5,7 @@ import jwt, {JwtPayload}                    from 'jsonwebtoken';
 import { v4 as uuidv4 }                     from 'uuid';
 
 const INTERNAL_PREFIX = 'INTERNAL';
-const MESH_PREFIX   = 'MESH';
+const MESH_PREFIX     = 'MESH';
 
 const SUPERADMIN    = 'SUPERADMIN';
 const QUERY_TIMEOUT = 7500;
@@ -37,8 +37,7 @@ export interface ScopeRestriction {
 }
 
 export class Microservice extends NATSClient {
-    sourceVersion: string = process.env.SOURCE_VERSION || 'LOCAL';
-
+    sourceVersion: string = process.env.SOURCE_VERSION  || 'LOCAL';
     messageValidator: any = {
         privateKey:         process.env.JWT_PRIVATE_KEY || null,
         publicKey:          process.env.JWT_PUBLIC_KEY  || null,
@@ -48,7 +47,8 @@ export class Microservice extends NATSClient {
         kmsSigningKeyID:    process.env.KMS_KEY_ARN     || null
     };
 
-    publicKeys: PUBLIC_KEY[] = [];
+    serviceMessages: string[] = [];
+    publicKeys: PUBLIC_KEY[]  = [];
     kms: any = null;
 
     constructor(serviceName: string) {
@@ -111,6 +111,7 @@ export class Microservice extends NATSClient {
 
     registerHandler(topic: string, fnHandler: ServiceHandler, minScopeRequired: string = SUPERADMIN, queue: string | null = null, topicPrefix: string = MESH_PREFIX): void {
         try {
+            this.serviceMessages.push(topic);
             let topicHandler: NATSTopicHandler = async (request: string, replyTo: string, topic: string): Promise<void> => {
                 let errors = null;
                 let result = null;
@@ -282,10 +283,14 @@ export class Microservice extends NATSClient {
 
         let token_assertions: any = null;
         try {
-            token_assertions = ((this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm) ||
-                                (this.messageValidator.kmsSigningKeyID && this.messageValidator.jwtAlgorithm))
-                ? await this.verifyToken(context.ephemeralToken)
-                : this.decodeToken(context.ephemeralToken);
+            if( (this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm) ||
+                (this.messageValidator.kmsSigningKeyID && this.messageValidator.jwtAlgorithm) ) {
+                token_assertions = await this.verifyToken(context.ephemeralToken);
+                if(token_assertions) token_assertions.signatureVerified = true;
+            } else {
+                token_assertions = this.decodeToken(context.ephemeralToken);
+                if(token_assertions) token_assertions.signatureVerified = false;
+            }
 
             if(!token_assertions)                 throw "Error Decoding Ephemeral Authorization Token";
             if(token_assertions.exp < Date.now()) throw "Ephemeral Authorization Token Expired";
@@ -299,13 +304,13 @@ export class Microservice extends NATSClient {
             token_assertions.authorization = ephemeralAuth.authorization;
 
             token_assertions.authorization.scope = (topic: string) => {
+                if(topic.endsWith('INTERNAL'))                return '*';
                 if(token_assertions.authorization.superAdmin) return '*';
                 return token_assertions.authorization.permissions[topic] || 'NONE';
             };
 
             let assertedScope: string = token_assertions.authorization.scope(topic);
-            if(token_assertions.authorization.superAdmin) token_assertions.authorization.scopeRestriction = null;
-            else token_assertions.authorization.scopeRestriction = this.authorizeScope(assertedScope, token_assertions, minScopeRequired);
+            token_assertions.authorization.scopeRestriction = this.authorizeScope(assertedScope, token_assertions, minScopeRequired);
 
         } catch(err) {
             throw `UNAUTHORIZED: validateRequestAssertions Error: ${JSON.stringify(err)}`;
@@ -315,10 +320,9 @@ export class Microservice extends NATSClient {
 
     private authorizeScope(assertedScope: string, assertions: any, minScopeRequired: string): ScopeRestriction | null {
 
+        if(assertions.authorization.superAdmin) return null;
+
         switch(minScopeRequired) {
-            case 'SUPERADMIN':
-                throw 'UNAUTHORIZED:  Requires SUPERADMIN Privileges';
-                break;
             case '*':
                 if(assertedScope !== '*')  throw 'UNAUTHORIZED:  Requires GLOBAL Permission Scope';
                 break;
@@ -342,25 +346,26 @@ export class Microservice extends NATSClient {
                 break;
 
             case 'NOAUTH':
-                return null; //Shortcut - no restrictions, no authorization check
+                return null; //Shortcut - no scope check, no restrictions
                 break;
 
             default:
                 throw `SERVER ERROR:  Invalid Scope Requirement (${minScopeRequired})`;
         }
 
-        let scopeRestriction: ScopeRestriction | null = null;
+        //Default to OWNER (lowest) Scope
+        let scopeRestriction: ScopeRestriction | null = { user_id: assertions.authentication.user_id };
         switch(assertedScope) {
-            case "SITE":
-                scopeRestriction = { site_id: assertions.authentication.site_id };
-                break;
-
             case "MEMBER":
                 scopeRestriction = { member_id: assertions.authentication.member_id };
                 break;
 
-            case "OWNER":
-                scopeRestriction = { user_id: assertions.authentication.user_id };
+            case "SITE":
+                scopeRestriction = { site_id: assertions.authentication.site_id };
+                break;
+
+            case "*":
+                scopeRestriction = null;
         }
         return scopeRestriction;
     }
@@ -379,7 +384,7 @@ export class Microservice extends NATSClient {
     // TEST Function
     //***************************************************
     private versionNode() {
-        return { version: this.sourceVersion };
+        return { version: this.sourceVersion, messages: this.serviceMessages };
     }
 
     private registerTestHandler() {
