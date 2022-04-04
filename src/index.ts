@@ -151,7 +151,7 @@ export class Microservice extends NATSClient {
         }
     }
 
-    async generateToken(assertions: any): Promise<string | null> {
+    generateToken(assertions: any): string | null {
         try {
             if(!this.messageValidator.privateKey || !this.messageValidator.jwtAlgorithm) throw "MessageValidator Not Configured";
             return jwt.sign(assertions, this.messageValidator.privateKey, {algorithm: this.messageValidator.jwtAlgorithm});
@@ -161,7 +161,7 @@ export class Microservice extends NATSClient {
         return null;
     }
 
-    async verifyToken(token: any): Promise<JwtPayload | string | null> {
+    verifyToken(token: any): JwtPayload | string | null {
         try {
             if(!this.messageValidator.publicKey || !this.messageValidator.jwtAlgorithm) throw "MessageValidator Not Configured";
             return jwt.verify(token, this.messageValidator.publicKey, {algorithms: [this.messageValidator.jwtAlgorithm]});

@@ -143,7 +143,7 @@ export class Microservice extends NATSClient {
             catch (err) { }
         }
     }
-    async generateToken(assertions) {
+    generateToken(assertions) {
         try {
             if (!this.messageValidator.privateKey || !this.messageValidator.jwtAlgorithm)
                 throw "MessageValidator Not Configured";
@@ -157,7 +157,7 @@ export class Microservice extends NATSClient {
         }
         return null;
     }
-    async verifyToken(token) {
+    verifyToken(token) {
         try {
             if (!this.messageValidator.publicKey || !this.messageValidator.jwtAlgorithm)
                 throw "MessageValidator Not Configured";
