@@ -235,27 +235,27 @@ export class Microservice extends NATSClient {
             let requestAuthentication = ephemeralAuth.authentication;
             let requestAuthorization = ephemeralAuth.authorization;
             let signatureVerified = ephemeral_assertions.signatureVerified;
-            if (context.advocateToken) {
-                let advocate_assertions = null;
+            if (context.proxyToken) {
+                let proxy_assertions = null;
                 if (this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm) {
-                    advocate_assertions = await this.verifyToken(context.advocateToken);
-                    if (!advocate_assertions)
+                    proxy_assertions = await this.verifyToken(context.proxyToken);
+                    if (!proxy_assertions)
                         signatureVerified = false;
                 }
                 else {
-                    advocate_assertions = this.decodeToken(context.advocateToken);
+                    proxy_assertions = this.decodeToken(context.proxyToken);
                 }
-                if (!advocate_assertions)
+                if (!proxy_assertions)
                     throw "Error Decoding Advocate Authorization Token";
-                if (advocate_assertions.exp < Date.now())
+                if (proxy_assertions.exp < Date.now())
                     throw "Advocate Authorization Token Expired";
-                if (!advocate_assertions.ephemeralAuth)
+                if (!proxy_assertions.ephemeralAuth)
                     throw "Invalid Advocate Authorization Token";
-                let advocateAuth = JSON.parse(base64url.decode(token_assertions.ephemeralAuth));
-                if (!advocateAuth.authentication || !advocateAuth.authorization)
+                let proxyAuth = JSON.parse(base64url.decode(token_assertions.ephemeralAuth));
+                if (!proxyAuth.authentication || !proxyAuth.authorization)
                     throw "Invalid Advocate Authorization Token Payload";
-                requestAuthentication.advocate = advocateAuth.authentication;
-                requestAuthorization = this.advocateAuthorization(requestAuthorization, advocateAuth.authorization);
+                requestAuthentication.proxy = proxyAuth.authentication;
+                requestAuthorization = this.proxyAuthorization(requestAuthorization, proxyAuth.authorization);
             }
             token_assertions.authentication = requestAuthentication;
             token_assertions.authorization = requestAuthorization;
@@ -273,27 +273,27 @@ export class Microservice extends NATSClient {
         }
         return token_assertions;
     }
-    advocateAuthorization(baseAuthorization, advocateAuthorization) {
-        for (let permission in advocateAuthorization.permissions) {
+    proxyAuthorization(baseAuthorization, proxyAuthorization) {
+        for (let permission in proxyAuthorization.permissions) {
             let basePermission = baseAuthorization.permissions[permission];
-            let advocatePermission = advocateAuthorization.permissions[permission];
+            let proxyPermission = proxyAuthorization.permissions[permission];
             if (!basePermission)
-                baseAuthorization.permissions[permission] = advocatePermission;
+                baseAuthorization.permissions[permission] = proxyPermission;
             else {
                 switch (basePermission) {
                     case "OWNER":
-                        if (advocatePermission !== "OWNER") {
-                            baseAuthorization.permissions[permission] = advocatePermission;
+                        if (proxyPermission !== "OWNER") {
+                            baseAuthorization.permissions[permission] = proxyPermission;
                         }
                         break;
                     case "MEMBER":
-                        if (advocatePermission === "*" || advocatePermission === "SITE") {
-                            baseAuthorization.permissions[permission] = advocatePermission;
+                        if (proxyPermission === "*" || proxyPermission === "SITE") {
+                            baseAuthorization.permissions[permission] = proxyPermission;
                         }
                         break;
                     case "SITE":
-                        if (advocatePermission === "*") {
-                            baseAuthorization.permissions[permission] = advocatePermission;
+                        if (proxyPermission === "*") {
+                            baseAuthorization.permissions[permission] = proxyPermission;
                         }
                         break;
                     case "*":

@@ -229,26 +229,26 @@ export class Microservice extends NATSClient {
             let requestAuthorization: any = ephemeralAuth.authorization;
             let signatureVerified: boolean = ephemeral_assertions.signatureVerified;
 
-            //Process advocateToken (if exists) Second
-            if(context.advocateToken) {
-                let advocate_assertions: any = null;
+            //Process proxyToken (if exists) Second
+            if(context.proxyToken) {
+                let proxy_assertions: any = null;
                 if(this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm) {
-                    advocate_assertions = await this.verifyToken(context.advocateToken);
-                    if(!advocate_assertions) signatureVerified = false;
+                    proxy_assertions = await this.verifyToken(context.proxyToken);
+                    if(!proxy_assertions) signatureVerified = false;
                 } else {
-                    advocate_assertions = this.decodeToken(context.advocateToken);
+                    proxy_assertions = this.decodeToken(context.proxyToken);
                 }
 
-                if(!advocate_assertions)                 throw "Error Decoding Advocate Authorization Token";
-                if(advocate_assertions.exp < Date.now()) throw "Advocate Authorization Token Expired";
+                if(!proxy_assertions)                 throw "Error Decoding Advocate Authorization Token";
+                if(proxy_assertions.exp < Date.now()) throw "Advocate Authorization Token Expired";
 
-                if(!advocate_assertions.ephemeralAuth)   throw "Invalid Advocate Authorization Token";
-                let advocateAuth = JSON.parse(base64url.decode(token_assertions.ephemeralAuth));
+                if(!proxy_assertions.ephemeralAuth)   throw "Invalid Advocate Authorization Token";
+                let proxyAuth = JSON.parse(base64url.decode(token_assertions.ephemeralAuth));
 
-                if(!advocateAuth.authentication || !advocateAuth.authorization) throw "Invalid Advocate Authorization Token Payload";
+                if(!proxyAuth.authentication || !proxyAuth.authorization) throw "Invalid Advocate Authorization Token Payload";
 
-                requestAuthentication.advocate = advocateAuth.authentication;
-                requestAuthorization = this.advocateAuthorization(requestAuthorization, advocateAuth.authorization);
+                requestAuthentication.proxy = proxyAuth.authentication;
+                requestAuthorization = this.proxyAuthorization(requestAuthorization, proxyAuth.authorization);
             }
 
             token_assertions.authentication = requestAuthentication;
@@ -269,30 +269,30 @@ export class Microservice extends NATSClient {
         return token_assertions;
     }
 
-    private advocateAuthorization(baseAuthorization: any, advocateAuthorization: any): any {
+    private proxyAuthorization(baseAuthorization: any, proxyAuthorization: any): any {
         //This merges the two authorizations, taking the HIGHEST authorization, if there is overlap
-        for(let permission in advocateAuthorization.permissions) {
+        for(let permission in proxyAuthorization.permissions) {
             let basePermission: string     = baseAuthorization.permissions[permission];
-            let advocatePermission: string = advocateAuthorization.permissions[permission];
+            let proxyPermission: string = proxyAuthorization.permissions[permission];
 
-            if(!basePermission) baseAuthorization.permissions[permission] = advocatePermission;
+            if(!basePermission) baseAuthorization.permissions[permission] = proxyPermission;
             else {
                 switch(basePermission) {
                     case "OWNER":
-                        if (advocatePermission !== "OWNER") {
-                            baseAuthorization.permissions[permission] = advocatePermission;
+                        if (proxyPermission !== "OWNER") {
+                            baseAuthorization.permissions[permission] = proxyPermission;
                         }
                         break;
 
                     case "MEMBER":
-                        if (advocatePermission === "*" || advocatePermission === "SITE") {  //Only change if a higher privilege
-                            baseAuthorization.permissions[permission] = advocatePermission
+                        if (proxyPermission === "*" || proxyPermission === "SITE") {  //Only change if a higher privilege
+                            baseAuthorization.permissions[permission] = proxyPermission
                         }
                         break;
 
                     case "SITE":
-                        if (advocatePermission === "*") {  //Only change if a higher privilege
-                            baseAuthorization.permissions[permission] = advocatePermission
+                        if (proxyPermission === "*") {  //Only change if a higher privilege
+                            baseAuthorization.permissions[permission] = proxyPermission
                         }
                         break;
 
