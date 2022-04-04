@@ -274,6 +274,12 @@ export class Microservice extends NATSClient {
         return token_assertions;
     }
     proxyAuthorization(baseAuthorization, proxyAuthorization) {
+        if (baseAuthorization.superAdmin)
+            return baseAuthorization;
+        if (proxyAuthorization.superAdmin) {
+            baseAuthorization.superAdmin = true;
+            return baseAuthorization;
+        }
         for (let permission in proxyAuthorization.permissions) {
             let basePermission = baseAuthorization.permissions[permission];
             let proxyPermission = proxyAuthorization.permissions[permission];

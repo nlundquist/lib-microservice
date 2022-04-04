@@ -271,6 +271,13 @@ export class Microservice extends NATSClient {
 
     private proxyAuthorization(baseAuthorization: any, proxyAuthorization: any): any {
         //This merges the two authorizations, taking the HIGHEST authorization, if there is overlap
+        if(baseAuthorization.superAdmin) return baseAuthorization;
+        if(proxyAuthorization.superAdmin) {
+            baseAuthorization.superAdmin = true;
+            return baseAuthorization;
+        }
+
+        //Otherwise, iterate permissions
         for(let permission in proxyAuthorization.permissions) {
             let basePermission: string     = baseAuthorization.permissions[permission];
             let proxyPermission: string = proxyAuthorization.permissions[permission];
