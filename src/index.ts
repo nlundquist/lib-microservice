@@ -207,27 +207,55 @@ export class Microservice extends NATSClient {
 
         let token_assertions: any = null;
         try {
+            //Process ephemeralToken First
+            let ephemeral_assertions: any = null;
             if(this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm) {
-                token_assertions = await this.verifyToken(context.ephemeralToken);
-                if(token_assertions) token_assertions.signatureVerified = true;
+                ephemeral_assertions = await this.verifyToken(context.ephemeralToken);
+                if(ephemeral_assertions) ephemeral_assertions.signatureVerified = true;
             } else {
-                token_assertions = this.decodeToken(context.ephemeralToken);
-                if(token_assertions) token_assertions.signatureVerified = false;
+                ephemeral_assertions = this.decodeToken(context.ephemeralToken);
+                if(ephemeral_assertions) ephemeral_assertions.signatureVerified = false;
             }
 
-            if(!token_assertions)                 throw "Error Decoding Ephemeral Authorization Token";
-            if(token_assertions.exp < Date.now()) throw "Ephemeral Authorization Token Expired";
+            if(!ephemeral_assertions)                 throw "Error Decoding Ephemeral Authorization Token";
+            if(ephemeral_assertions.exp < Date.now()) throw "Ephemeral Authorization Token Expired";
 
-            if(!token_assertions.ephemeralAuth) throw "Invalid Ephemeral Authorization Token";
-            let ephemeralAuth = JSON.parse(base64url.decode(token_assertions.ephemeralAuth));
+            if(!ephemeral_assertions.ephemeralAuth)   throw "Invalid Ephemeral Authorization Token";
+            let ephemeralAuth = JSON.parse(base64url.decode(ephemeral_assertions.ephemeralAuth));
 
             if(!ephemeralAuth.authentication || !ephemeralAuth.authorization) throw "Invalid Ephemeral Authorization Token Payload";
 
-            token_assertions.authentication = ephemeralAuth.authentication;
-            token_assertions.authorization = ephemeralAuth.authorization;
+            let requestAuthentication: any = ephemeralAuth.authentication;
+            let requestAuthorization: any = ephemeralAuth.authorization;
+            let signatureVerified: boolean = ephemeral_assertions.signatureVerified;
+
+            //Process advocateToken (if exists) Second
+            if(context.advocateToken) {
+                let advocate_assertions: any = null;
+                if(this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm) {
+                    advocate_assertions = await this.verifyToken(context.advocateToken);
+                    if(!advocate_assertions) signatureVerified = false;
+                } else {
+                    advocate_assertions = this.decodeToken(context.advocateToken);
+                }
+
+                if(!advocate_assertions)                 throw "Error Decoding Advocate Authorization Token";
+                if(advocate_assertions.exp < Date.now()) throw "Advocate Authorization Token Expired";
+
+                if(!advocate_assertions.ephemeralAuth)   throw "Invalid Advocate Authorization Token";
+                let advocateAuth = JSON.parse(base64url.decode(token_assertions.ephemeralAuth));
+
+                if(!advocateAuth.authentication || !advocateAuth.authorization) throw "Invalid Advocate Authorization Token Payload";
+
+                requestAuthentication.advocate = advocateAuth.authentication;
+                requestAuthorization = this.advocateAuthorization(requestAuthorization, advocateAuth.authorization);
+            }
+
+            token_assertions.authentication = requestAuthentication;
+            token_assertions.authorization = requestAuthorization;
+            token_assertions.signatureVerified = signatureVerified;
 
             token_assertions.authorization.scope = (topic: string) => {
-                if(topic.endsWith('INTERNAL'))                return '*';
                 if(token_assertions.authorization.superAdmin) return '*';
                 return token_assertions.authorization.permissions[topic] || 'NONE';
             };
@@ -239,6 +267,42 @@ export class Microservice extends NATSClient {
             throw `UNAUTHORIZED: validateRequestAssertions Error: ${JSON.stringify(err)}`;
         }
         return token_assertions;
+    }
+
+    private advocateAuthorization(baseAuthorization: any, advocateAuthorization: any): any {
+        //This merges the two authorizations, taking the HIGHEST authorization, if there is overlap
+        for(let permission in advocateAuthorization.permissions) {
+            let basePermission: string     = baseAuthorization.permissions[permission];
+            let advocatePermission: string = advocateAuthorization.permissions[permission];
+
+            if(!basePermission) baseAuthorization.permissions[permission] = advocatePermission;
+            else {
+                switch(basePermission) {
+                    case "OWNER":
+                        if (advocatePermission !== "OWNER") {
+                            baseAuthorization.permissions[permission] = advocatePermission;
+                        }
+                        break;
+
+                    case "MEMBER":
+                        if (advocatePermission === "*" || advocatePermission === "SITE") {  //Only change if a higher privilege
+                            baseAuthorization.permissions[permission] = advocatePermission
+                        }
+                        break;
+
+                    case "SITE":
+                        if (advocatePermission === "*") {  //Only change if a higher privilege
+                            baseAuthorization.permissions[permission] = advocatePermission
+                        }
+                        break;
+
+                    case "*":
+                        //Do Nothing - already have the highest privilege
+                        break;
+                }
+            }
+        }
+        return baseAuthorization;
     }
 
     private authorizeScope(assertedScope: string, assertions: any, minScopeRequired: string): ScopeRestriction | null {
