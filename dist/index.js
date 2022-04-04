@@ -257,9 +257,11 @@ export class Microservice extends NATSClient {
                 requestAuthentication.proxy = proxyAuth.authentication;
                 requestAuthorization = this.proxyAuthorization(requestAuthorization, proxyAuth.authorization);
             }
-            token_assertions.authentication = requestAuthentication;
-            token_assertions.authorization = requestAuthorization;
-            token_assertions.signatureVerified = signatureVerified;
+            token_assertions = {
+                authentication: requestAuthentication,
+                authorization: requestAuthorization,
+                signatureVerified: signatureVerified
+            };
             token_assertions.authorization.scope = (topic) => {
                 if (token_assertions.authorization.superAdmin)
                     return '*';
