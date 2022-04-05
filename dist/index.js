@@ -227,10 +227,12 @@ export class Microservice extends NATSClient {
             }
             if (!ephemeral_assertions)
                 throw "Error Decoding Ephemeral Authorization Token";
+            if (!ephemeral_assertions.exp)
+                throw "Invalid Ephemeral Authorization Token: Missing exp";
             if (ephemeral_assertions.exp < Date.now())
                 throw "Ephemeral Authorization Token Expired";
             if (!ephemeral_assertions.ephemeralAuth)
-                throw "Invalid Ephemeral Authorization Token";
+                throw "Invalid Ephemeral Authorization Token: Missing ephemeralAuth";
             let ephemeralAuth = JSON.parse(base64url.decode(ephemeral_assertions.ephemeralAuth));
             if (!ephemeralAuth.authentication || !ephemeralAuth.authorization)
                 throw "Invalid Ephemeral Authorization Token Payload";
@@ -241,21 +243,21 @@ export class Microservice extends NATSClient {
                 let proxy_assertions = null;
                 if (this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm) {
                     proxy_assertions = await this.verifyToken(context.proxyToken);
-                    if (!proxy_assertions)
-                        signatureVerified = false;
                 }
                 else {
                     proxy_assertions = this.decodeToken(context.proxyToken);
                 }
                 if (!proxy_assertions)
-                    throw "Error Decoding Advocate Authorization Token";
+                    throw "Error Decoding Proxy Authorization Token";
+                if (!proxy_assertions.exp)
+                    throw "Invalid Proxy Authorization Token: Missing exp";
                 if (proxy_assertions.exp < Date.now())
-                    throw "Advocate Authorization Token Expired";
+                    throw "Proxy Authorization Token Expired";
                 if (!proxy_assertions.ephemeralAuth)
-                    throw "Invalid Advocate Authorization Token";
-                let proxyAuth = JSON.parse(base64url.decode(token_assertions.ephemeralAuth));
+                    throw "Invalid Proxy Authorization Token: Missing ephemeralAuth";
+                let proxyAuth = JSON.parse(base64url.decode(proxy_assertions.ephemeralAuth));
                 if (!proxyAuth.authentication || !proxyAuth.authorization)
-                    throw "Invalid Advocate Authorization Token Payload";
+                    throw "Invalid Proxy Authorization Token Payload";
                 requestAuthentication.proxy = proxyAuth.authentication;
                 requestAuthorization = this.proxyAuthorization(requestAuthorization, proxyAuth.authorization);
             }
