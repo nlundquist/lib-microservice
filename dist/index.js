@@ -39,6 +39,7 @@ export class Microservice extends NATSClient {
             siteID: context.siteID || null,
             idToken: context.idToken || null,
             ephemeralToken: context.ephemeralToken || null,
+            proxyToken: context.proxyToken || null,
         };
         let queryData = JSON.stringify({ context: newContext, payload });
         try {
