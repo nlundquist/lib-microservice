@@ -73,13 +73,14 @@ export class Microservice extends NATSClient {
         catch (err) { }
         return super.publishTopic(`${topicPrefix}.${topic}`, eventData);
     }
-    registerHandler(topic, fnHandler, minScopeRequired = SUPERADMIN, queue = null, topicPrefix = MESH_PREFIX) {
+    registerHandler(handlerTopic, fnHandler, minScopeRequired = SUPERADMIN, queue = null, topicPrefix = MESH_PREFIX) {
         try {
-            this.serviceMessages.push(topic);
+            this.serviceMessages.push(handlerTopic);
             let topicHandler = async (request, replyTo, topic) => {
                 let errors = null;
                 let result = null;
                 let topicStart = Date.now();
+                topic = topic.substring(topic.indexOf(".") + 1);
                 try {
                     try {
                         this.emit('debug', 'SERVICE', 'Microservice | TopicHandler (' + topic + ') | ' + request);
@@ -89,7 +90,7 @@ export class Microservice extends NATSClient {
                     if (!parsedRequest?.context || !parsedRequest?.payload)
                         throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
                     parsedRequest.context.assertions = await this.validateRequestAssertions(topic, parsedRequest.context, minScopeRequired);
-                    parsedRequest.context.topic = topic.substring(topic.indexOf(".") + 1);
+                    parsedRequest.context.topic = topic;
                     result = await fnHandler(parsedRequest);
                     if (typeof result !== 'object') {
                         result = {
@@ -134,11 +135,11 @@ export class Microservice extends NATSClient {
                     catch (err) { }
                 }
             };
-            super.registerTopicHandler(`${topicPrefix}.${topic}`, topicHandler, queue);
+            super.registerTopicHandler(`${topicPrefix}.${handlerTopic}`, topicHandler, queue);
         }
         catch (err) {
             try {
-                this.emit('error', 'SERVICE', 'Microservice | registerTopicHandler (' + topic + ') Error: ' + err);
+                this.emit('error', 'SERVICE', 'Microservice | registerTopicHandler (' + handlerTopic + ') Error: ' + err);
             }
             catch (err) { }
         }

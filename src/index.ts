@@ -95,13 +95,14 @@ export class Microservice extends NATSClient {
         return super.publishTopic(`${topicPrefix}.${topic}`, eventData);
     }
 
-    registerHandler(topic: string, fnHandler: ServiceHandler, minScopeRequired: string = SUPERADMIN, queue: string | null = null, topicPrefix: string = MESH_PREFIX): void {
+    registerHandler(handlerTopic: string, fnHandler: ServiceHandler, minScopeRequired: string = SUPERADMIN, queue: string | null = null, topicPrefix: string = MESH_PREFIX): void {
         try {
-            this.serviceMessages.push(topic);
+            this.serviceMessages.push(handlerTopic);
             let topicHandler: NATSTopicHandler = async (request: string, replyTo: string, topic: string): Promise<void> => {
                 let errors = null;
                 let result = null;
                 let topicStart = Date.now();
+                topic = topic.substring(topic.indexOf(".")+1);  //Strip the Prefix
 
                 try {
                     try{this.emit('debug', 'SERVICE', 'Microservice | TopicHandler (' + topic + ') | ' + request);}catch(err){}
@@ -112,7 +113,7 @@ export class Microservice extends NATSClient {
 
                     //Verify MESSAGE AUTHORIZATION
                     parsedRequest.context.assertions = await this.validateRequestAssertions(topic, parsedRequest.context, minScopeRequired);
-                    parsedRequest.context.topic = topic.substring(topic.indexOf(".")+1);
+                    parsedRequest.context.topic = topic;
 
                     //Request is Valid, Handle the Request
                     result = await fnHandler(parsedRequest);
@@ -144,10 +145,10 @@ export class Microservice extends NATSClient {
                 }
             };
 
-            super.registerTopicHandler(`${topicPrefix}.${topic}`, topicHandler, queue);
+            super.registerTopicHandler(`${topicPrefix}.${handlerTopic}`, topicHandler, queue);
 
         } catch(err) {
-            try{this.emit('error', 'SERVICE', 'Microservice | registerTopicHandler (' + topic + ') Error: ' + err);}catch(err){}
+            try{this.emit('error', 'SERVICE', 'Microservice | registerTopicHandler (' + handlerTopic + ') Error: ' + err);}catch(err){}
         }
     }
 

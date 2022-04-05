@@ -25,7 +25,7 @@ export declare class Microservice extends NATSClient {
     init(): Promise<void>;
     query(topic: string, context: any, payload: any, queryTimeout?: number, topicPrefix?: string): Promise<any>;
     publish(topic: string, context: any, payload: any, topicPrefix?: string): void;
-    registerHandler(topic: string, fnHandler: ServiceHandler, minScopeRequired?: string, queue?: string | null, topicPrefix?: string): void;
+    registerHandler(handlerTopic: string, fnHandler: ServiceHandler, minScopeRequired?: string, queue?: string | null, topicPrefix?: string): void;
     generateToken(assertions: any): string | null;
     verifyToken(token: any): JwtPayload | string | null;
     decodeToken(token: any): JwtPayload | null;
