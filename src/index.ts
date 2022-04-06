@@ -322,6 +322,10 @@ export class Microservice extends NATSClient {
         if(assertions.authorization.superAdmin) return null;
 
         switch(minScopeRequired) {
+            case 'SUPERADMIN':
+                if(!assertions.authorization.superAdmin) throw 'UNAUTHORIZED: Requires SUPERADMIN Permissions';
+                break;
+
             case '*':
                 if(assertedScope !== '*')  throw 'UNAUTHORIZED:  Requires GLOBAL Permission Scope';
                 break;
