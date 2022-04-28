@@ -232,6 +232,7 @@ export class Microservice extends NATSClient {
                 throw "Invalid Ephemeral Authorization Token: Missing exp";
             if (ephemeral_assertions.exp < Date.now())
                 throw "Ephemeral Authorization Token Expired";
+            let requestDomain = ephemeral_assertions.domain || DOMAIN_INTERNAL;
             if (!ephemeral_assertions.ephemeralAuth)
                 throw "Invalid Ephemeral Authorization Token: Missing ephemeralAuth";
             let ephemeralAuth = JSON.parse(base64url.decode(ephemeral_assertions.ephemeralAuth));
@@ -239,7 +240,6 @@ export class Microservice extends NATSClient {
                 throw "Invalid Ephemeral Authorization Token Payload";
             let requestAuthentication = ephemeralAuth.authentication;
             let requestAuthorization = ephemeralAuth.authorization;
-            let requestDomain = ephemeralAuth.domain || DOMAIN_INTERNAL;
             let signatureVerified = ephemeral_assertions.signatureVerified;
             if (context.proxyToken) {
                 let proxy_assertions = null;
