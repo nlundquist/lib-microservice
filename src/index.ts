@@ -3,6 +3,7 @@ import base64url                            from 'base64url';
 import jwt, {Jwt, JwtPayload, Algorithm}         from 'jsonwebtoken';
 import { v4 as uuidv4 }                     from 'uuid';
 
+const DOMAIN_INTERNAL = 'INTERNAL';
 const INTERNAL_PREFIX = 'INTERNAL';
 const MESH_PREFIX     = 'MESH';
 
@@ -230,6 +231,7 @@ export class Microservice extends NATSClient {
 
             let requestAuthentication: any = ephemeralAuth.authentication;
             let requestAuthorization: any = ephemeralAuth.authorization;
+            let requestDomain: string = ephemeralAuth.domain || DOMAIN_INTERNAL;
             let signatureVerified: boolean = ephemeral_assertions.signatureVerified;
 
             //Process proxyToken (if exists) Second
@@ -252,11 +254,13 @@ export class Microservice extends NATSClient {
 
                 requestAuthentication.proxy = proxyAuth.authentication;
                 requestAuthorization = this.proxyAuthorization(requestAuthorization, proxyAuth.authorization);
+                requestDomain = DOMAIN_INTERNAL;
             }
 
             token_assertions = {
                 authentication: requestAuthentication,
                 authorization: requestAuthorization,
+                domain: requestDomain,
                 signatureVerified: signatureVerified
             };
 

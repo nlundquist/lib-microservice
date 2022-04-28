@@ -2,6 +2,7 @@ import { NATSClient } from '@randomrod/lib-nats-client';
 import base64url from 'base64url';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
+const DOMAIN_INTERNAL = 'INTERNAL';
 const INTERNAL_PREFIX = 'INTERNAL';
 const MESH_PREFIX = 'MESH';
 const SUPERADMIN = 'SUPERADMIN';
@@ -238,6 +239,7 @@ export class Microservice extends NATSClient {
                 throw "Invalid Ephemeral Authorization Token Payload";
             let requestAuthentication = ephemeralAuth.authentication;
             let requestAuthorization = ephemeralAuth.authorization;
+            let requestDomain = ephemeralAuth.domain || DOMAIN_INTERNAL;
             let signatureVerified = ephemeral_assertions.signatureVerified;
             if (context.proxyToken) {
                 let proxy_assertions = null;
@@ -260,10 +262,12 @@ export class Microservice extends NATSClient {
                     throw "Invalid Proxy Authorization Token Payload";
                 requestAuthentication.proxy = proxyAuth.authentication;
                 requestAuthorization = this.proxyAuthorization(requestAuthorization, proxyAuth.authorization);
+                requestDomain = DOMAIN_INTERNAL;
             }
             token_assertions = {
                 authentication: requestAuthentication,
                 authorization: requestAuthorization,
+                domain: requestDomain,
                 signatureVerified: signatureVerified
             };
             token_assertions.authorization.scope = (topic) => {
