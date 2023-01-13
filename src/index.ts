@@ -1,6 +1,6 @@
 import { NATSClient, NATSTopicHandler }     from '@randomrod/lib-nats-client';
 import base64url                            from 'base64url';
-import jwt, {Jwt, JwtPayload, Algorithm}         from 'jsonwebtoken';
+import jwt, {Jwt, JwtPayload, Algorithm}    from 'jsonwebtoken';
 import { v4 as uuidv4 }                     from 'uuid';
 
 const DOMAIN_INTERNAL = 'INTERNAL';
