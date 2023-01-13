@@ -174,9 +174,9 @@ export class Microservice extends NATSClient {
         return null;
     }
 
-    decodeToken(token: any): JwtPayload | null {
+    decodeToken(token: any): JwtPayload | string | null {
         try {
-            let decoded: Jwt | null = jwt.decode(token, {complete: true});
+            let decoded: Jwt | string | null = jwt.decode(token, {complete: true});
             if(decoded?.payload) return decoded.payload;
         } catch(err) {
             try{this.emit('error', 'MICROSERVICE', `Error Decoding Ephemeral Token: ${JSON.stringify(err)}`);}catch(err){}

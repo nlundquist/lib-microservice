@@ -28,7 +28,7 @@ export declare class Microservice extends NATSClient {
     registerHandler(handlerTopic: string, fnHandler: ServiceHandler, minScopeRequired?: string, queue?: string | null, topicPrefix?: string): void;
     generateToken(assertions: any): string | null;
     verifyToken(token: any): JwtPayload | string | null;
-    decodeToken(token: any): JwtPayload | null;
+    decodeToken(token: any): JwtPayload | string | null;
     verifyParameters(test: any, fields: string[]): void;
     private validateRequestAssertions;
     private proxyAuthorization;
