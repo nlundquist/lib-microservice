@@ -11,21 +11,15 @@ export class Microservice extends NATSClient {
     constructor(serviceName) {
         super(serviceName);
         this.sourceVersion = process.env.SOURCE_VERSION || 'LOCAL';
-        this.messageValidator = {
-            privateKey: process.env.JWT_PRIVATE_KEY || null,
-            publicKey: process.env.JWT_PUBLIC_KEY || null,
+        this.jwtValidator = {
+            publicPEM: process.env.JWT_PUBLIC_PEM ? Buffer.from(process.env.JWT_PUBLIC_PEM, 'base64').toString('ascii') : null,
             jwtAlgorithm: (process.env.JWT_ALGORITHM || 'RS256'),
         };
         this.serviceMessages = [];
     }
     async init() {
         await super.init();
-        if (!this.messageValidator.privateKey)
-            try {
-                this.emit('info', 'no correlation', 'Message Signing NOT Configured');
-            }
-            catch (err) { }
-        if (!this.messageValidator.publicKey)
+        if (!this.jwtValidator.publicPEM)
             try {
                 this.emit('info', 'no correlation', 'Message Validation NOT Configured');
             }
@@ -146,29 +140,17 @@ export class Microservice extends NATSClient {
             catch (err) { }
         }
     }
-    generateToken(assertions) {
+    verifyToken(token, publicPEM, algorithm) {
         try {
-            if (!this.messageValidator.privateKey || !this.messageValidator.jwtAlgorithm)
-                throw "MessageValidator Not Configured";
-            return jwt.sign(assertions, this.messageValidator.privateKey, { algorithm: this.messageValidator.jwtAlgorithm });
+            let verificationPEM = publicPEM || this.jwtValidator.publicPEM || null;
+            let verificationAlgo = algorithm || this.jwtValidator.jwtAlgorithm || null;
+            if (!verificationPEM || !verificationAlgo)
+                throw "JWTValidator Not Configured";
+            return jwt.verify(token, verificationPEM, { algorithms: [verificationAlgo] });
         }
         catch (err) {
             try {
-                this.emit('error', 'MICROSERVICE', `Error Generating Ephemeral Token: ${JSON.stringify(err)}`);
-            }
-            catch (err) { }
-        }
-        return null;
-    }
-    verifyToken(token) {
-        try {
-            if (!this.messageValidator.publicKey || !this.messageValidator.jwtAlgorithm)
-                throw "MessageValidator Not Configured";
-            return jwt.verify(token, this.messageValidator.publicKey, { algorithms: [this.messageValidator.jwtAlgorithm] });
-        }
-        catch (err) {
-            try {
-                this.emit('error', 'MICROSERVICE', `Error Verifying Ephemeral Token: ${JSON.stringify(err)}`);
+                this.emit('error', 'MICROSERVICE', `Error Verifying Token: ${JSON.stringify(err)}`);
             }
             catch (err) { }
         }
@@ -182,7 +164,7 @@ export class Microservice extends NATSClient {
         }
         catch (err) {
             try {
-                this.emit('error', 'MICROSERVICE', `Error Decoding Ephemeral Token: ${JSON.stringify(err)}`);
+                this.emit('error', 'MICROSERVICE', `Error Decoding Token: ${JSON.stringify(err)}`);
             }
             catch (err) { }
         }
@@ -216,7 +198,7 @@ export class Microservice extends NATSClient {
         let token_assertions = null;
         try {
             let ephemeral_assertions = null;
-            if (this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm) {
+            if (this.jwtValidator.publicPEM && this.jwtValidator.jwtAlgorithm) {
                 ephemeral_assertions = await this.verifyToken(context.ephemeralToken);
                 if (ephemeral_assertions)
                     ephemeral_assertions.signatureVerified = true;
@@ -243,7 +225,7 @@ export class Microservice extends NATSClient {
             let signatureVerified = ephemeral_assertions.signatureVerified;
             if (context.proxyToken) {
                 let proxy_assertions = null;
-                if (this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm) {
+                if (this.jwtValidator.publicPEM && this.jwtValidator.jwtAlgorithm) {
                     proxy_assertions = await this.verifyToken(context.proxyToken);
                 }
                 else {

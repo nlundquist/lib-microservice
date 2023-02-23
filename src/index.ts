@@ -11,9 +11,8 @@ const SUPERADMIN    = 'SUPERADMIN';
 const QUERY_TIMEOUT = 7500;
 
 interface JWTValidator {
-    privateKey: string | null,
-    publicKey:  string | null,
-    jwtAlgorithm: Algorithm
+    publicPEM?:    string | null,
+    jwtAlgorithm?: Algorithm
 }
 
 export interface ServiceRequest {
@@ -33,9 +32,8 @@ export interface ScopeRestriction {
 
 export class Microservice extends NATSClient {
     sourceVersion: string = process.env.SOURCE_VERSION  || 'LOCAL';
-    messageValidator: JWTValidator = {
-        privateKey:         process.env.JWT_PRIVATE_KEY ||  null,
-        publicKey:          process.env.JWT_PUBLIC_KEY  ||  null,
+    jwtValidator: JWTValidator = {
+        publicPEM:          process.env.JWT_PUBLIC_PEM ? Buffer.from(process.env.JWT_PUBLIC_PEM, 'base64').toString('ascii')  :  null,
         jwtAlgorithm:      (process.env.JWT_ALGORITHM   || 'RS256') as Algorithm,
     };
 
@@ -47,10 +45,8 @@ export class Microservice extends NATSClient {
 
     async init(): Promise<void> {
         await super.init();
-        if(!this.messageValidator.privateKey)
-            try{this.emit('info', 'no correlation', 'Message Signing NOT Configured');}catch(err){}
 
-        if(!this.messageValidator.publicKey)
+        if(!this.jwtValidator.publicPEM)
             try{this.emit('info', 'no correlation', 'Message Validation NOT Configured');}catch(err){}
 
         this.registerTestHandler();
@@ -154,32 +150,25 @@ export class Microservice extends NATSClient {
         }
     }
 
-    generateToken(assertions: any): string | null {
+    verifyToken(token: string, publicPEM?: string, algorithm?: Algorithm): JwtPayload | string | null {
         try {
-            if(!this.messageValidator.privateKey || !this.messageValidator.jwtAlgorithm) throw "MessageValidator Not Configured";
-            return jwt.sign(assertions, this.messageValidator.privateKey, {algorithm: this.messageValidator.jwtAlgorithm});
+            let verificationPEM: string | null     = publicPEM || this.jwtValidator.publicPEM || null;
+            let verificationAlgo: Algorithm | null = algorithm || this.jwtValidator.jwtAlgorithm || null;
+
+            if(!verificationPEM || !verificationAlgo) throw "JWTValidator Not Configured";
+            return jwt.verify(token, <string>verificationPEM, {algorithms: [verificationAlgo]});
         } catch(err) {
-            try{this.emit('error', 'MICROSERVICE', `Error Generating Ephemeral Token: ${JSON.stringify(err)}`);}catch(err){}
+            try{this.emit('error', 'MICROSERVICE', `Error Verifying Token: ${JSON.stringify(err)}`);}catch(err){}
         }
         return null;
     }
 
-    verifyToken(token: any): JwtPayload | string | null {
-        try {
-            if(!this.messageValidator.publicKey || !this.messageValidator.jwtAlgorithm) throw "MessageValidator Not Configured";
-            return jwt.verify(token, this.messageValidator.publicKey, {algorithms: [this.messageValidator.jwtAlgorithm]});
-        } catch(err) {
-            try{this.emit('error', 'MICROSERVICE', `Error Verifying Ephemeral Token: ${JSON.stringify(err)}`);}catch(err){}
-        }
-        return null;
-    }
-
-    decodeToken(token: any): JwtPayload | string | null {
+    decodeToken(token: string): JwtPayload | string | null {
         try {
             let decoded: Jwt | string | null = jwt.decode(token, {complete: true});
             if(decoded?.payload) return decoded.payload;
         } catch(err) {
-            try{this.emit('error', 'MICROSERVICE', `Error Decoding Ephemeral Token: ${JSON.stringify(err)}`);}catch(err){}
+            try{this.emit('error', 'MICROSERVICE', `Error Decoding Token: ${JSON.stringify(err)}`);}catch(err){}
         }
         return null;
     }
@@ -212,7 +201,7 @@ export class Microservice extends NATSClient {
         try {
             //Process ephemeralToken First
             let ephemeral_assertions: any = null;
-            if(this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm) {
+            if(this.jwtValidator.publicPEM && this.jwtValidator.jwtAlgorithm) {
                 ephemeral_assertions = await this.verifyToken(context.ephemeralToken);
                 if(ephemeral_assertions) ephemeral_assertions.signatureVerified = true;
             } else {
@@ -238,7 +227,7 @@ export class Microservice extends NATSClient {
             //Process proxyToken (if exists) Second
             if(context.proxyToken) {
                 let proxy_assertions: any = null;
-                if(this.messageValidator.publicKey && this.messageValidator.jwtAlgorithm) {
+                if(this.jwtValidator.publicPEM && this.jwtValidator.jwtAlgorithm) {
                     proxy_assertions = await this.verifyToken(context.proxyToken);
                 } else {
                     proxy_assertions = this.decodeToken(context.proxyToken);
