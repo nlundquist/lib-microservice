@@ -12,7 +12,7 @@ export class Microservice extends NATSClient {
         super(serviceName);
         this.sourceVersion = process.env.SOURCE_VERSION || 'LOCAL';
         this.jwtValidator = {
-            publicPEM: process.env.JWT_PUBLIC_PEM ? Buffer.from(process.env.JWT_PUBLIC_PEM, 'base64').toString('ascii') : null,
+            publicPEM: process.env.JWT_MESH_PUBLIC_PEM ? Buffer.from(process.env.JWT_MESH_PUBLIC_PEM, 'base64').toString('ascii') : null,
             jwtAlgorithm: (process.env.JWT_ALGORITHM || 'RS256'),
         };
         this.serviceMessages = [];

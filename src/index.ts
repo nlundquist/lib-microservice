@@ -33,7 +33,7 @@ export interface ScopeRestriction {
 export class Microservice extends NATSClient {
     sourceVersion: string = process.env.SOURCE_VERSION  || 'LOCAL';
     jwtValidator: JWTValidator = {
-        publicPEM:          process.env.JWT_PUBLIC_PEM ? Buffer.from(process.env.JWT_PUBLIC_PEM, 'base64').toString('ascii')  :  null,
+        publicPEM:          process.env.JWT_MESH_PUBLIC_PEM ? Buffer.from(process.env.JWT_MESH_PUBLIC_PEM, 'base64').toString('ascii')  :  null,
         jwtAlgorithm:      (process.env.JWT_ALGORITHM   || 'RS256') as Algorithm,
     };
 
