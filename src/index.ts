@@ -61,6 +61,7 @@ export class Microservice extends NATSClient {
             correlationUUID:    context.correlationUUID     || uuidv4(),
             siteID:             context.siteID              || null,
             idToken:            context.idToken             || null,
+            apiKey:             context.apiKey              || null,
             ephemeralToken:     context.ephemeralToken      || null,
             proxyToken:         context.proxyToken          || null,
         };
@@ -394,7 +395,7 @@ export class Microservice extends NATSClient {
                 let result = null;
 
                 try {
-                    try{this.emit('debug', 'SERVICE TEST', 'Microservice | TopicHandler (' + topic + ') | ' + request);}catch(err){}
+                    try{this.emit('trace', 'SERVICE TEST', 'Microservice | TopicHandler (' + topic + ') | ' + request);}catch(err){}
 
                     let parsedRequest: ServiceRequest = request ? JSON.parse(request) : null;
                     if(!parsedRequest) throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
@@ -409,16 +410,16 @@ export class Microservice extends NATSClient {
 
                 if(replyTo) {
                     this.publishResponse(replyTo, errors, result);
-                    try{this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + JSON.stringify(errors ? errors : result));}catch(err){}
+                    try{this.emit('trace', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | ' + JSON.stringify(errors ? errors : result));}catch(err){}
                 } else {
-                    try{this.emit('debug', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | No Response Requested');}catch(err){}
+                    try{this.emit('trace', 'SERVICE', 'Microservice | topicHandler (' + topic + ') Response | No Response Requested');}catch(err){}
                 }
             };
 
             super.registerTopicHandler(testTopic, topicHandler, instanceID);
 
         } catch(err) {
-            try{this.emit('error', 'SERVICE TEST', 'Microservice | registerTopicHandler (' + testTopic + ') Error: ' + err);}catch(err){}
+            try{this.emit('error', 'SERVICE TEST', 'Microservice | registerTestHandler (' + testTopic + ') Error: ' + err);}catch(err){}
         }
     }
 
