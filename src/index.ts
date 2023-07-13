@@ -274,6 +274,7 @@ export class Microservice extends NATSClient {
         if(baseAuthorization.superAdmin) return baseAuthorization;
         if(proxyAuthorization.superAdmin) {
             baseAuthorization.superAdmin = true;
+            baseAuthorization.roleLevel = proxyAuthorization.roleLevel;
             return baseAuthorization;
         }
 
@@ -309,6 +310,11 @@ export class Microservice extends NATSClient {
                 }
             }
         }
+
+        //Use the highest role level
+        if(proxyAuthorization.roleLevel > baseAuthorization.roleLevel)
+            baseAuthorization.roleLevel = proxyAuthorization.roleLevel;
+
         return baseAuthorization;
     }
 

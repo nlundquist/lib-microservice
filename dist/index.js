@@ -271,6 +271,7 @@ export class Microservice extends NATSClient {
             return baseAuthorization;
         if (proxyAuthorization.superAdmin) {
             baseAuthorization.superAdmin = true;
+            baseAuthorization.roleLevel = proxyAuthorization.roleLevel;
             return baseAuthorization;
         }
         for (let permission in proxyAuthorization.permissions) {
@@ -300,6 +301,8 @@ export class Microservice extends NATSClient {
                 }
             }
         }
+        if (proxyAuthorization.roleLevel > baseAuthorization.roleLevel)
+            baseAuthorization.roleLevel = proxyAuthorization.roleLevel;
         return baseAuthorization;
     }
     authorizeScope(assertedScope, assertions, minScopeRequired) {
