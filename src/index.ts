@@ -25,9 +25,10 @@ export interface ServiceHandler {
 }
 
 export interface ScopeRestriction {
-    site_id?:   string,
-    member_id?: string,
-    user_id?:   string
+    site_access_id?:    string,
+    site_id?:           string,
+    member_id?:         string,
+    user_id?:           string
 }
 
 export class Microservice extends NATSClient {
@@ -365,7 +366,7 @@ export class Microservice extends NATSClient {
                 break;
 
             case "SITE":
-                scopeRestriction = { site_id: assertions.authentication.site_id };
+                scopeRestriction = { site_id: assertions.authentication.site_id, site_access_id: assertions.authentication.user_id };
                 break;
 
             case "*":
