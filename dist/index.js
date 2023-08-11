@@ -347,7 +347,11 @@ export class Microservice extends NATSClient {
                 scopeRestriction = { member_id: assertions.authentication.member_id };
                 break;
             case "SITE":
-                scopeRestriction = { site_id: assertions.authentication.site_id, site_access_id: assertions.authentication.user_id };
+                scopeRestriction = {
+                    site_id: assertions.authentication.site_id,
+                    site_access_id: assertions.authentication.user_id,
+                    site_access_list: assertions.authorization.site_access
+                };
                 break;
             case "*":
                 scopeRestriction = null;
