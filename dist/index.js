@@ -260,6 +260,18 @@ export class Microservice extends NATSClient {
             };
             let assertedScope = token_assertions.authorization.scope(topic);
             token_assertions.authorization.scopeRestriction = this.authorizeScope(assertedScope, token_assertions, minScopeRequired);
+            token_assertions.authorization.siteScopeAuthorized = (site_id) => {
+                let scopeRestriction = token_assertions.authorization.scopeRestriction;
+                if (!scopeRestriction)
+                    return true;
+                if (scopeRestriction.site_access) {
+                    for (let site_access_site_id of scopeRestriction.site_access) {
+                        if (site_access_site_id === site_id)
+                            return true;
+                    }
+                }
+                return false;
+            };
         }
         catch (err) {
             throw `UNAUTHORIZED: validateRequestAssertions Error: ${JSON.stringify(err)}`;
