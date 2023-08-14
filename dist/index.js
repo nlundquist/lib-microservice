@@ -362,7 +362,15 @@ export class Microservice extends NATSClient {
                 scopeRestriction = {
                     site_id: assertions.authentication.site_id,
                     site_access_id: assertions.authentication.user_id,
-                    site_access_list: assertions.authorization.site_access
+                    site_authorized: (site_id) => {
+                        if (assertions.authorization.site_access) {
+                            for (let authorized_site_id of assertions.authorization.site_access) {
+                                if (authorized_site_id === site_id)
+                                    return true;
+                            }
+                        }
+                        return false;
+                    }
                 };
                 break;
             case "*":

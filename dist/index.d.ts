@@ -12,7 +12,7 @@ export interface ServiceHandler {
     (request: ServiceRequest): Promise<any>;
 }
 export interface ScopeRestriction {
-    site_access_list?: string[];
+    site_authorized?: any;
     site_access_id?: string;
     site_id?: string;
     member_id?: string;
