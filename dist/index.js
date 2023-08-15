@@ -363,10 +363,8 @@ export class Microservice extends NATSClient {
                     site_id: assertions.authentication.site_id,
                     site_access_id: assertions.authentication.user_id,
                     site_authorized: (site_id) => {
-                        console.log(`ASSERTIONS.AUTHORIZATION.SITE_ACCESS: ${JSON.stringify(assertions.authorization.site_access)}`);
                         if (assertions.authorization.site_access) {
                             for (let authorized_site_id of assertions.authorization.site_access) {
-                                console.log(`AUTHORIZE SITE: ${site_id}:${authorized_site_id}`);
                                 if (authorized_site_id === site_id)
                                     return true;
                             }
