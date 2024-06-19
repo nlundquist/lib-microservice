@@ -56,7 +56,7 @@ export class Microservice extends NATSClient {
 
     async query(topic: string, context: any, payload: any, queryTimeout: number = QUERY_TIMEOUT, topicPrefix: string = INTERNAL_PREFIX): Promise<any> {
         if(typeof context !== 'object' || typeof payload !== 'object')
-            throw 'INVALID REQUEST: One or more of context or payload are not properly structured objects.';
+            throw new Error('INVALID REQUEST: One or more of context or payload are not properly structured objects.');
 
         //Reset the Context to remove previously decoded information (keep it clean!)
         let newContext: any = {
@@ -74,7 +74,7 @@ export class Microservice extends NATSClient {
         let topicStart = Date.now();
 
         let queryResponse: string = await super.queryTopic(`${topicPrefix}.${topic}`, queryData, queryTimeout);
-        if(!queryResponse) throw `INVALID RESPONSE (${topic}) from NATS Mesh`;
+        if(!queryResponse) throw new Error(`INVALID RESPONSE (${topic}) from NATS Mesh`);
 
         let topicDuration = Date.now() - topicStart;
 
@@ -82,13 +82,13 @@ export class Microservice extends NATSClient {
         try{this.emit('debug', newContext.correlationUUID, `NATS RESPONSE (${topic}) | ${topicDuration} ms : ${queryResponse}`);}catch(err){}
 
         let parsedResponse = JSON.parse(queryResponse);
-        if(parsedResponse.response.errors) throw parsedResponse.response.errors;
+        if(parsedResponse.response.errors) throw new Error(parsedResponse.response.errors);
         return parsedResponse.response.result;
     }
 
     publish(topic: string, context: any, payload: any, topicPrefix: string = INTERNAL_PREFIX): void {
         if(typeof context !== 'object' || typeof payload !== 'object')
-            throw 'INVALID REQUEST: One or more of context or payload are not properly structured objects.';
+            throw new Error('INVALID REQUEST: One or more of context or payload are not properly structured objects.');
 
         let eventData = JSON.stringify({ context, payload });
         try{this.emit('debug', 'no correlation', `NATS PUBLISH (${topic}): ${eventData}`);}catch(err){}
@@ -110,7 +110,7 @@ export class Microservice extends NATSClient {
 
                     let parsedRequest: ServiceRequest = request ? JSON.parse(request) : null;
                     if(!parsedRequest?.context || !parsedRequest?.payload )
-                        throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
+                        throw new Error('INVALID REQUEST: Either context or payload, or both, are missing.');
 
                     //Verify MESSAGE AUTHORIZATION
                     parsedRequest.context.assertions = await this.validateRequestAssertions(topic, parsedRequest.context, minScopeRequired);
@@ -158,7 +158,7 @@ export class Microservice extends NATSClient {
             let verificationPEM: string | null     = publicPEM || this.jwtValidator.publicPEM || null;
             let verificationAlgo: Algorithm | null = algorithm || this.jwtValidator.jwtAlgorithm || null;
 
-            if(!verificationPEM || !verificationAlgo) throw "JWTValidator Not Configured";
+            if(!verificationPEM || !verificationAlgo) throw new Error("JWTValidator Not Configured");
             return jwt.verify(token, <string>verificationPEM, {algorithms: [verificationAlgo]});
         } catch(err) {
             try{this.emit('error', 'MICROSERVICE', `Error Verifying Token: ${JSON.stringify(err)}`);}catch(err){}
@@ -177,7 +177,7 @@ export class Microservice extends NATSClient {
     }
 
     verifyParameters(test: any, fields: string[]): void {
-        if(!test) throw 'VALIDATION: Missing Verification Test Object';
+        if(!test) throw new Error('VALIDATION: Missing Verification Test Object');
 
         for(let field of fields) {
             let fieldEntries = field.split(",");
@@ -186,10 +186,10 @@ export class Microservice extends NATSClient {
                 for(let fieldEntry of fieldEntries) {
                     if(test.hasOwnProperty(fieldEntry) && test[field] !== null) anyFound = true;
                 }
-                if(!anyFound)  throw `VALIDATION: Missing At Least One Parameter Of - ${field}`;
+                if(!anyFound)  throw new Error(`VALIDATION: Missing At Least One Parameter Of - ${field}`);
             } else {
                 if(!test.hasOwnProperty(field) || test[field] === null )
-                    throw `VALIDATION: Missing Parameter - ${field}`;
+                    throw new Error(`VALIDATION: Missing Parameter - ${field}`);
             }
         }
     }
@@ -197,7 +197,7 @@ export class Microservice extends NATSClient {
     //PRIVATE FUNCTIONS
     private async validateRequestAssertions(topic: string, context: any, minScopeRequired: string): Promise<any> {
 
-        if(!context.ephemeralToken && minScopeRequired !== 'NOAUTH') throw 'UNAUTHORIZED: Ephemeral Authorization Token Missing';
+        if(!context.ephemeralToken && minScopeRequired !== 'NOAUTH') throw new Error('UNAUTHORIZED: Ephemeral Authorization Token Missing');
         if(!context.ephemeralToken) return null;
 
         let token_assertions: any = null;
@@ -212,16 +212,16 @@ export class Microservice extends NATSClient {
                 if(ephemeral_assertions) ephemeral_assertions.signatureVerified = false;
             }
 
-            if(!ephemeral_assertions)                 throw "Error Decoding Ephemeral Authorization Token";
-            if(!ephemeral_assertions.exp)             throw "Invalid Ephemeral Authorization Token: Missing exp";
-            if(ephemeral_assertions.exp < Date.now()) throw "Ephemeral Authorization Token Expired";
+            if(!ephemeral_assertions)                 throw new Error("Error Decoding Ephemeral Authorization Token");
+            if(!ephemeral_assertions.exp)             throw new Error("Invalid Ephemeral Authorization Token: Missing exp");
+            if(ephemeral_assertions.exp < Date.now()) throw new Error("Ephemeral Authorization Token Expired");
 
             let requestDomain: string = ephemeral_assertions.domain || DOMAIN_INTERNAL;
 
-            if(!ephemeral_assertions.ephemeralAuth)   throw "Invalid Ephemeral Authorization Token: Missing ephemeralAuth";
+            if(!ephemeral_assertions.ephemeralAuth)   throw new Error("Invalid Ephemeral Authorization Token: Missing ephemeralAuth");
             let ephemeralAuth = JSON.parse(base64url.decode(ephemeral_assertions.ephemeralAuth));
 
-            if(!ephemeralAuth.authentication || !ephemeralAuth.authorization) throw "Invalid Ephemeral Authorization Token Payload";
+            if(!ephemeralAuth.authentication || !ephemeralAuth.authorization) throw new Error("Invalid Ephemeral Authorization Token Payload");
 
             let requestAuthentication: any = ephemeralAuth.authentication;
             let requestAuthorization: any = ephemeralAuth.authorization;
@@ -236,14 +236,14 @@ export class Microservice extends NATSClient {
                     proxy_assertions = this.decodeToken(context.proxyToken);
                 }
 
-                if(!proxy_assertions)                 throw "Error Decoding Proxy Authorization Token";
-                if(!proxy_assertions.exp)             throw "Invalid Proxy Authorization Token: Missing exp";
-                if(proxy_assertions.exp < Date.now()) throw "Proxy Authorization Token Expired";
+                if(!proxy_assertions)                 throw new Error("Error Decoding Proxy Authorization Token");
+                if(!proxy_assertions.exp)             throw new Error("Invalid Proxy Authorization Token: Missing exp");
+                if(proxy_assertions.exp < Date.now()) throw new Error("Proxy Authorization Token Expired");
 
-                if(!proxy_assertions.ephemeralAuth)   throw "Invalid Proxy Authorization Token: Missing ephemeralAuth";
+                if(!proxy_assertions.ephemeralAuth)   throw new Error("Invalid Proxy Authorization Token: Missing ephemeralAuth");
                 let proxyAuth = JSON.parse(base64url.decode(proxy_assertions.ephemeralAuth));
 
-                if(!proxyAuth.authentication || !proxyAuth.authorization) throw "Invalid Proxy Authorization Token Payload";
+                if(!proxyAuth.authentication || !proxyAuth.authorization) throw new Error("Invalid Proxy Authorization Token Payload");
 
                 requestAuthentication.proxy = proxyAuth.authentication;
                 requestAuthorization = this.proxyAuthorization(requestAuthorization, proxyAuth.authorization);
@@ -277,7 +277,7 @@ export class Microservice extends NATSClient {
             };
 
         } catch(err) {
-            throw `UNAUTHORIZED: validateRequestAssertions Error: ${JSON.stringify(err)}`;
+            throw new Error(`UNAUTHORIZED: validateRequestAssertions Error: ${JSON.stringify(err)}`);
         }
         return token_assertions;
     }
@@ -337,29 +337,29 @@ export class Microservice extends NATSClient {
 
         switch(minScopeRequired) {
             case 'SUPERADMIN':
-                if(!assertions.authorization.superAdmin) throw 'UNAUTHORIZED: Requires SUPERADMIN Permissions';
+                if(!assertions.authorization.superAdmin) throw new Error('UNAUTHORIZED: Requires SUPERADMIN Permissions');
                 break;
 
             case '*':
-                if(assertedScope !== '*')  throw 'UNAUTHORIZED:  Requires GLOBAL Permission Scope';
+                if(assertedScope !== '*') throw new Error('UNAUTHORIZED:  Requires GLOBAL Permission Scope');
                 break;
 
             case 'SITE':
                 if( assertedScope !== '*' &&
-                    assertedScope !== 'SITE')  throw 'UNAUTHORIZED:  Requires SITE Permission Scope or Greater';
+                    assertedScope !== 'SITE') throw new Error('UNAUTHORIZED:  Requires SITE Permission Scope or Greater');
                 break;
 
             case 'MEMBER':
                 if( assertedScope !== '*' &&
                     assertedScope !== 'SITE' &&
-                    assertedScope !== 'MEMBER')  throw 'UNAUTHORIZED:  Requires MEMBER Permission Scope or Greater';
+                    assertedScope !== 'MEMBER') throw new Error('UNAUTHORIZED:  Requires MEMBER Permission Scope or Greater');
                 break;
 
             case 'OWNER':
                 if( assertedScope !== '*' &&
                     assertedScope !== 'SITE' &&
                     assertedScope !== 'MEMBER' &&
-                    assertedScope !== 'OWNER')  throw 'UNAUTHORIZED:  Requires OWNER Permission Scope or Greater';
+                    assertedScope !== 'OWNER') throw new Error('UNAUTHORIZED:  Requires OWNER Permission Scope or Greater');
                 break;
 
             case 'NOAUTH':
@@ -367,7 +367,7 @@ export class Microservice extends NATSClient {
                 break;
 
             default:
-                throw `SERVER ERROR:  Invalid Scope Requirement (${minScopeRequired})`;
+                throw new Error(`SERVER ERROR:  Invalid Scope Requirement (${minScopeRequired})`);
         }
 
         //Default to OWNER (lowest) Scope
@@ -428,7 +428,7 @@ export class Microservice extends NATSClient {
                     try{this.emit('trace', 'SERVICE TEST', 'Microservice | TopicHandler (' + topic + ') | ' + request);}catch(err){}
 
                     let parsedRequest: ServiceRequest = request ? JSON.parse(request) : null;
-                    if(!parsedRequest) throw 'INVALID REQUEST: Either context or payload, or both, are missing.';
+                    if(!parsedRequest) throw new Error('INVALID REQUEST: Either context or payload, or both, are missing.');
 
                     result = this.versionNode();
 
